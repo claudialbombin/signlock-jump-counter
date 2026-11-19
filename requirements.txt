@@ -1,0 +1,4 @@
+# Classical computer vision only (no deep learning frameworks)
+opencv-python>=4.8
+numpy>=1.24
+matplotlib>=3.7
