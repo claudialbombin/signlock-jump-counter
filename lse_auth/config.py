@@ -54,3 +54,27 @@ def camera_backend() -> int:
     if sys.platform.startswith("win"):
         return cv2.CAP_DSHOW
     return cv2.CAP_ANY
+
+# ---------------------------------------------------------------------------
+# Hand region of interest (ROI)
+# ---------------------------------------------------------------------------
+
+# Fixed box where the user has to place the hand, as fractions of the frame
+# (x, y, width, height). It is on the right side because we use the right
+# hand and the image is mirrored. Restricting the search to this box avoids
+# detecting the face or the arms as "skin" (it will be used from step 3 on).
+HAND_ROI = (0.55, 0.15, 0.35, 0.70)
+
+
+def roi_pixels(frame_width: int, frame_height: int):
+    """
+    Convert HAND_ROI from fractions to integer pixel coordinates.
+
+    Returns
+    -------
+    tuple of int
+        (x, y, w, h) in pixels for a frame of the given size.
+    """
+    fx, fy, fw, fh = HAND_ROI
+    return (int(fx * frame_width), int(fy * frame_height),
+            int(fw * frame_width), int(fh * frame_height))

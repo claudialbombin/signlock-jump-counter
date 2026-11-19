@@ -18,6 +18,7 @@ The system has two blocks:
 |------|---------|
 | `calibration_main.py`, `calibration_functions.py` | Offline camera calibration (chessboard) |
 | `calibration_images/`, `Results/` | Calibration images and corner/reprojection results |
+| `calibration/` | Exported camera parameters (`camera_params.npz`) |
 | `lse_auth/` | Sign language authentication package (security block) |
 | `pasos/` | Work plan, one markdown file per step, and LSE reference images |
 
@@ -25,4 +26,13 @@ The system has two blocks:
 
 ```bash
 pip install -r requirements.txt
+```
+
+## Usage
+
+```bash
+python calibration_main.py                    # offline calibration -> calibration/camera_params.npz
+python -m lse_auth.reference_viewer           # H-O-L-A reference panel
+python -m lse_auth.capture_dataset            # capture the labelled dataset
+python -m lse_auth.capture_dataset --summary  # images per class + contact sheet
 ```
