@@ -6,6 +6,7 @@ import os
 import glob
 import matplotlib.pyplot as plt
 import calibration_functions as cal_func
+from lse_auth.calibration_io import save_calibration
 
 # CONFIGURATION
 
@@ -51,6 +52,11 @@ def main():
     print("\nIntrinsics:\n", intrinsics)
     print("Distortion coefficients:\n", dist_coeffs)
     print("Root mean squared reprojection error:\n", rms)
+
+    # Save the parameters so the live system does not need to recalibrate
+    image_size = imgs_gray[0].shape[::-1]   # (width, height)
+    save_calibration(intrinsics, dist_coeffs, image_size, rms)
+    print("Camera parameters saved for the live system (calibration/camera_params.npz)")
 
     # Reprojection error per image
     errors = cal_func.per_image_error(chessboard_points, valid_corners, intrinsics, dist_coeffs, rvecs, tvecs)
