@@ -11,8 +11,9 @@ Decisions taken in step 1 (see pasos/01_definicion_alfabeto_lse.md):
     * Only the RIGHT hand, palm facing the camera, fingers pointing up.
       Accepting both hands would double the cases to tune; we can extend it
       later by mirroring the image if there is time.
-    * H is treated as a STATIC posture (index + middle finger together,
-      no wrist movement), which is much easier to detect with classical CV.
+    * H is treated as a STATIC posture (index + middle finger together and
+      pointing sideways, no wrist movement), which is much easier to detect
+      with classical CV.
     * O is NOT a closed fist with a big hole: it is a small thumb-index
       circle with the other three fingers extended. So it needs BOTH a hole
       and ~3 extended fingers to be told apart from a relaxed open hand.
@@ -59,8 +60,10 @@ class HandShape:
     thumb_apart : bool
         True if the thumb is clearly separated from the rest of the hand,
         forming a wide gap (big convexity defect), like in the L.
-    elongated : bool
-        True if the silhouette is clearly taller than wide (fingers up).
+    orientation : str
+        Main direction of the silhouette: "vertical" (taller than wide,
+        fingers up), "horizontal" (wider than tall, fingers sideways) or
+        "any" when the bounding box is roughly square and gives no clue.
     reference_image : str
         File name of the reference picture inside pasos/referencia_lse/.
     """
@@ -70,7 +73,7 @@ class HandShape:
     extended_fingers: Tuple[int, int]
     has_hole: bool
     thumb_apart: bool
-    elongated: bool
+    orientation: str
     reference_image: str
 
 
@@ -81,12 +84,15 @@ class HandShape:
 LETTERS: Dict[str, HandShape] = {
     "H": HandShape(
         letter="H",
-        description="Index and middle fingers extended and together, "
-                    "the rest of the fingers closed (static version).",
+        # The reference drawing shows the two fingers pointing SIDEWAYS,
+        # so the silhouette is wider than tall. This is a useful clue to
+        # separate it from the other letters.
+        description="Index and middle fingers extended together pointing "
+                    "sideways, the rest of the fingers closed (static version).",
         extended_fingers=(1, 2),
         has_hole=False,
         thumb_apart=False,
-        elongated=True,
+        orientation="horizontal",
         reference_image="letra_H_signame.png",
     ),
     "O": HandShape(
@@ -98,7 +104,7 @@ LETTERS: Dict[str, HandShape] = {
         extended_fingers=(2, 4),
         has_hole=True,
         thumb_apart=False,
-        elongated=True,
+        orientation="vertical",
         reference_image="letra_O_foaps.png",
     ),
     "L": HandShape(
@@ -108,7 +114,7 @@ LETTERS: Dict[str, HandShape] = {
         extended_fingers=(2, 2),
         has_hole=False,
         thumb_apart=True,
-        elongated=False,
+        orientation="any",
         reference_image="letra_L_signame.png",
     ),
     "A": HandShape(
@@ -118,7 +124,7 @@ LETTERS: Dict[str, HandShape] = {
         extended_fingers=(0, 0),
         has_hole=False,
         thumb_apart=False,
-        elongated=False,
+        orientation="any",
         reference_image="letra_A_signame.png",
     ),
 }
@@ -152,6 +158,7 @@ def _check_consistency() -> None:
         assert letter == shape.letter
         low, high = shape.extended_fingers
         assert 0 <= low <= high <= 5, f"bad finger range for {letter}"
+        assert shape.orientation in ("vertical", "horizontal", "any")
 
 
 _check_consistency()
