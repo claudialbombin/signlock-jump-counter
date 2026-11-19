@@ -22,5 +22,12 @@ Formas confirmadas con imágenes de referencia reales (ver `pasos/referencia_lse
 ## Qué necesita estar hecho antes
 Nada técnico; es el punto de partida. Sí conviene tener ya aprobado por el profesor que el "patrón visual" del bloque de seguridad va a ser LSE dactilológica (lo pide el guion del proyecto: "planteamiento y diseño... debe contar con la aprobación del profesor").
 
+## Decisiones tomadas
+- **Mano**: solo la **derecha**, palma hacia la cámara, dedos hacia arriba. Se amplía a la izquierda (espejando la imagen) solo si sobra tiempo.
+- **H estática**: índice + corazón juntos y extendidos **hacia el lateral** (como en la ilustración de referencia), sin movimiento de muñeca. Al apuntar de lado, la silueta queda más ancha que alta: es una pista útil para el clasificador.
+- **O**: hueco pequeño pulgar-índice **y** ~3 dedos extendidos (las dos condiciones a la vez).
+- Las formas esperadas (nº de dedos, hueco, pulgar separado, orientación) quedan codificadas en `lse_auth/alphabet.py`, que es lo que leerán los Pasos 5 y 6. Los rangos numéricos son hipótesis iniciales a ajustar con el dataset del Paso 2.
+- Panel de referencia H-O-L-A: `python -m lse_auth.reference_viewer` → `pasos/referencia_lse/panel_HOLA.png`.
+
 ## Entregable del paso
-Este propio fichero (ya actualizado) + la carpeta `pasos/referencia_lse/` con las imágenes de referencia y sus fuentes documentadas en `fuentes.md`.
+Este propio fichero (ya actualizado) + `lse_auth/alphabet.py` + la carpeta `pasos/referencia_lse/` con las imágenes de referencia y sus fuentes documentadas en `fuentes.md`.
