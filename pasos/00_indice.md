@@ -1,23 +1,13 @@
-# Índice — Bloque "Desbloqueo por LSE (H-O-L-A)"
+# Índice general — `pasos/`
 
-División del trabajo de Claudia (Sistema de Seguridad: detección de patrones + decodificador de secuencia), en 12 pasos. Rama de trabajo principal: `feature/sign-language-auth`.
+Planes de trabajo del equipo, repartidos por bloque del sistema (ver diagrama de bloques del
+guion del proyecto). Cada subcarpeta tiene su propio `00_indice.md` con el detalle paso a paso.
 
-| # | Paso | Depende de |
-|---|------|------------|
-| 1 | Definición del alfabeto LSE objetivo (H-O-L-A) | — |
-| 2 | Captura del set de imágenes de referencia | 1, `feature/calibration` (en `main`) |
-| 3 | Segmentación de piel / aislamiento de la mano | 2 |
-| 4 | Detección del contorno de la mano | 3 |
-| 5 | Extracción de características geométricas | 4 |
-| 6 | Clasificador por reglas (H/O/L/A/ninguna) | 5 |
-| 7 | Estabilización temporal de la detección | 6 |
-| 8 | Decodificador de secuencia (memoria 4 letras + bloqueo/reset) | 7 |
-| 9 | Feedback visual en pantalla | 8, 4 |
-| 10 | Integración con el bloque siguiente (tracker) | 8, 9 → `feature/integration` |
-| 11 | Pruebas, ajuste de umbrales y medición de robustez | 3–9 |
-| 12 | Documentación para informe y vídeo | 1–11 |
+| Subcarpeta | Bloque | Rama de trabajo | Responsable |
+|---|---|---|---|
+| [`lse/`](lse/00_indice.md) | Sistema de seguridad — desbloqueo deletreando H-O-L-A en LSE | `feature/sign-language-auth` (y sub-ramas `feature/lse-00-setup`, `feature/lse-01-alphabet`, `feature/lse-02-dataset`...) | Claudia |
+| [`tracker/`](tracker/00_indice.md) | Sistema propuesto — contador de saltos por tracking de un zapato negro | `feature/rope-jump-counter` | tu compañera |
 
-Notas generales:
-- Todo el desarrollo de este bloque vive en `feature/sign-language-auth` y se integra al final con el resto vía `feature/integration` (Paso 10), igual que `feature/calibration` ya se mergeó en `main`.
-- La calibración de cámara (rama `feature/calibration`, ya en `main`) es prerequisito transversal: los frames que entran al Paso 3 deben pasar antes por `cv2.undistort` con los parámetros ya calculados.
-- Es visión clásica de principio a fin (sin deep learning), en línea con lo que pide el guion del proyecto.
+Los dos bloques son independientes hasta la integración final en `feature/integration`
+(ver el Paso 10 de `lse/` y el Paso 12 de `tracker/`, que son los puntos de contacto entre
+ambos: la interfaz de desbloqueo y la reutilización de la cámara/calibración).
