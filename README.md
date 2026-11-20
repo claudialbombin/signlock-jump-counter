@@ -20,7 +20,8 @@ The system has two blocks:
 | `calibration_images/`, `Results/` | Calibration images and corner/reprojection results |
 | `calibration/` | Exported camera parameters (`camera_params.npz`) |
 | `lse_auth/` | Sign language authentication package (security block) |
-| `pasos/` | Work plan, one markdown file per step, and LSE reference images |
+| `pasos/lse/` | Work plan for the security block (one markdown file per step) + LSE reference images and dataset |
+| `pasos/tracker/` | Work plan for the jump-counter tracker block (one markdown file per step) |
 
 ## Setup
 
