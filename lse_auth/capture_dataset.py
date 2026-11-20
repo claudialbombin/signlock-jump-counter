@@ -3,7 +3,7 @@ Step 2 - Capture the reference dataset of LSE hand shapes.
 
 Opens the calibrated camera, shows the live (undistorted, mirrored) image with
 the hand ROI drawn on top, and saves labelled frames into
-pasos/dataset_lse/<class>/img_XX.jpg.
+pasos/lse/dataset_lse/<class>/img_XX.jpg.
 
 Controls
 --------
