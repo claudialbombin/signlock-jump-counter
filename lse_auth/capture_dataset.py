@@ -3,16 +3,24 @@ Step 2 - Capture the reference dataset of LSE hand shapes.
 
 Opens the calibrated camera, shows the live (undistorted, mirrored) image with
 the hand ROI drawn on top, and saves labelled frames into
-pasos/dataset_lse/<class>/img_XX.jpg.
+pasos/lse/dataset_lse/<class>/img_XX.jpg.
 
 Controls
 --------
+    f             save the EMPTY scene as background (take the hand out of
+                  the box first). Mandatory at the start of every session
+                  and again whenever the camera or the light changes:
+                  step 3 subtracts it to find the hand.
     0 .. 4        choose the class: 0 = NONE, 1 = H, 2 = O, 3 = L, 4 = A
     c / SPACE     capture one image of the current class
     b             burst: capture BURST_SIZE images, one every BURST_GAP frames
                   (move the hand a little while it runs to get variety)
     d             delete the last image captured in this session (undo)
     q / ESC       quit
+
+Captures are refused until a background has been saved in the session, and
+every image is linked to the last background in backgrounds.csv. Keep the
+camera still for the whole session.
 
 The overlays (text, ROI box) are drawn on a COPY of the frame, so the saved
 images are clean.
@@ -37,11 +45,12 @@ from lse_auth.camera import Camera
 TARGET_PER_CLASS = 20    # the plan asks for ~15-20 images per class
 BURST_SIZE = 5
 BURST_GAP = 8            # frames between two burst captures (~0.25 s at 30 fps)
+BG_FRAMES = 30           # frames averaged for the background (~1 s), less noise
 WINDOW = "Dataset capture - press q to quit"
 
 
 def draw_overlay(frame: np.ndarray, label: str, counts: dict,
-                 message: str, burst_left: int) -> np.ndarray:
+                 message: str, burst_left: int, has_background: bool) -> np.ndarray:
     """
     Draw the user interface on a copy of the frame.
 
@@ -57,6 +66,8 @@ def draw_overlay(frame: np.ndarray, label: str, counts: dict,
         Last status message (e.g. the path of the last saved image).
     burst_left : int
         Images left in the current burst (0 if no burst is running).
+    has_background : bool
+        Whether a background was already saved in this session.
 
     Returns
     -------
@@ -75,6 +86,10 @@ def draw_overlay(frame: np.ndarray, label: str, counts: dict,
     cv2.rectangle(view, (0, 0), (w, 70), (0, 0, 0), -1)
     cv2.putText(view, f"Class: {label}", (15, 45), cv2.FONT_HERSHEY_SIMPLEX,
                 1.3, (255, 255, 255), 3, cv2.LINE_AA)
+
+    if not has_background:
+        cv2.putText(view, "Empty the box and press f (background)", (x, y - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
 
     # Counter of every class, green when the target is reached
     x_text = 320
@@ -105,8 +120,10 @@ def run_capture() -> None:
     label = CLASS_LABELS[1]            # start with H
     counts = dataset.count_images()
     saved_this_session: List[str] = []
-    message = "Choose a class (0-4) and press c to capture"
+    message = "First take the hand out of the box and press f"
     burst_left, frame_counter = 0, 0
+    background_path = None        # last background saved in this session
+    bg_sum, bg_left = None, 0     # running sum while averaging a background
 
     with Camera() as cam:
         print(f"Camera at {cam.frame_size[0]}x{cam.frame_size[1]}, "
@@ -120,15 +137,27 @@ def run_capture() -> None:
                 break
             frame_counter += 1
 
+            # Background: average BG_FRAMES frames of the empty scene
+            if bg_left:
+                bg_sum += frame.astype(np.float32)
+                bg_left -= 1
+                if not bg_left:
+                    background = (bg_sum / BG_FRAMES).round().astype(np.uint8)
+                    background_path = dataset.save_background(background)
+                    message = (f"Background saved "
+                               f"({os.path.basename(background_path)}), keep the camera still")
+
             # Burst mode: save one frame every BURST_GAP frames
             if burst_left and frame_counter % BURST_GAP == 0:
                 path = dataset.save_image(frame, label)
+                dataset.link_background(path, background_path)
                 saved_this_session.append(path)
                 counts[label] += 1
                 burst_left -= 1
                 message = f"Burst: saved {os.path.basename(path)} ({burst_left} left)"
 
-            cv2.imshow(WINDOW, draw_overlay(frame, label, counts, message, burst_left))
+            cv2.imshow(WINDOW, draw_overlay(frame, label, counts, message,
+                                            burst_left, background_path is not None))
             key = cv2.waitKey(1) & 0xFF
 
             if key in (ord("q"), 27):
@@ -137,18 +166,26 @@ def run_capture() -> None:
             if new_label is not None:
                 label = new_label
                 message = f"Class changed to {label}"
-            elif key in (ord("c"), ord(" ")):
+            elif key == ord("f") and not bg_left and not burst_left:
+                bg_sum = np.zeros(frame.shape, np.float32)
+                bg_left = BG_FRAMES
+                message = "Saving background, keep the box empty..."
+            elif key in (ord("c"), ord(" "), ord("b")) and background_path is None:
+                message = "No background yet: empty the box and press f first"
+            elif key in (ord("c"), ord(" ")) and not bg_left:
                 path = dataset.save_image(frame, label)
+                dataset.link_background(path, background_path)
                 saved_this_session.append(path)
                 counts[label] += 1
                 message = f"Saved {os.path.relpath(path, config.PROJECT_ROOT)}"
-            elif key == ord("b") and not burst_left:
+            elif key == ord("b") and not burst_left and not bg_left:
                 burst_left = BURST_SIZE
                 message = "Burst started, move the hand slightly"
             elif key == ord("d"):
                 if saved_this_session:
                     path = saved_this_session.pop()
                     os.remove(path)
+                    dataset.unlink_background(path)
                     removed_label = os.path.basename(os.path.dirname(path))
                     counts[removed_label] -= 1
                     message = f"Deleted {os.path.relpath(path, config.PROJECT_ROOT)}"

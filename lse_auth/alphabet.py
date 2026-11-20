@@ -7,7 +7,7 @@ have a binary silhouette of the hand. The later steps (feature extraction and
 rule-based classifier) read these descriptions instead of inventing their own,
 so if we ever change our mind about a letter we only change it here.
 
-Decisions taken in step 1 (see pasos/01_definicion_alfabeto_lse.md):
+Decisions taken in step 1 (see pasos/lse/01_definicion_alfabeto_lse.md):
     * Only the RIGHT hand, palm facing the camera, fingers pointing up.
       Accepting both hands would double the cases to tune; we can extend it
       later by mirroring the image if there is time.
@@ -65,7 +65,7 @@ class HandShape:
         fingers up), "horizontal" (wider than tall, fingers sideways) or
         "any" when the bounding box is roughly square and gives no clue.
     reference_image : str
-        File name of the reference picture inside pasos/referencia_lse/.
+        File name of the reference picture inside pasos/lse/referencia_lse/.
     """
 
     letter: str

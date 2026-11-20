@@ -3,7 +3,7 @@ Helpers to read and write the reference dataset of step 2.
 
 Folder layout (one sub-folder per class):
 
-    pasos/dataset_lse/
+    pasos/lse/dataset_lse/
         NONE/img_01.jpg, img_02.jpg ...
         H/...
         O/...
@@ -13,16 +13,29 @@ Folder layout (one sub-folder per class):
 The images are already undistorted when they are saved, so any later step
 can load them and work as if they came straight from the live camera.
 
+Background frames (added for step 3): the skin colour alone cannot separate
+the hand from a wooden shelf or a warm-lit wall, so step 3 also subtracts a
+picture of the empty scene. Every capture session starts by saving that
+empty scene in _background/bg_XX.jpg, and backgrounds.csv remembers which
+background belongs to each image:
+
+    pasos/lse/dataset_lse/
+        _background/bg_01.jpg ...
+        backgrounds.csv            image,background (paths relative to the dataset)
+
+Images captured before this existed simply have no background.
+
 I save them as JPEG with high quality instead of PNG: a 1280x720 PNG of a
 camera frame is ~1-2 MB, so ~100 images would make the repo very heavy,
 while JPEG at quality 95 is ~10 times smaller and the difference is not
 visible for skin segmentation.
 """
 
+import csv
 import glob
 import os
 import re
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -33,6 +46,9 @@ from lse_auth.alphabet import CLASS_LABELS
 IMAGE_EXT = ".jpg"
 JPEG_QUALITY = 95
 _NAME_PATTERN = re.compile(r"img_(\d+)\.(jpg|png)$")
+_BG_PATTERN = re.compile(r"bg_(\d+)\.(jpg|png)$")
+BACKGROUND_FOLDER = "_background"
+PAIRS_FILE = "backgrounds.csv"
 
 
 def class_dir(label: str, root: str = config.DATASET_DIR) -> str:
@@ -128,3 +144,78 @@ def contact_sheet(root: str = config.DATASET_DIR, per_class: int = 8,
             row[:, x0:x0 + thumb_width] = thumb
         rows.append(row)
     return np.vstack(rows)
+
+
+# ---------------------------------------------------------------------------
+# Background frames (empty scene) for step 3
+# ---------------------------------------------------------------------------
+
+def save_background(image: np.ndarray, root: str = config.DATASET_DIR) -> str:
+    """
+    Save a picture of the empty scene as _background/bg_XX.jpg.
+
+    Returns
+    -------
+    str
+        Path where the background was written.
+    """
+    folder = os.path.join(root, BACKGROUND_FOLDER)
+    os.makedirs(folder, exist_ok=True)
+    numbers = [int(m.group(1)) for m in
+               (_BG_PATTERN.search(os.path.basename(p))
+                for p in glob.glob(os.path.join(folder, "bg_*"))) if m]
+    path = os.path.join(folder, f"bg_{max(numbers, default=0) + 1:02d}{IMAGE_EXT}")
+    if not cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]):
+        raise IOError(f"Could not write {path}")
+    return path
+
+
+def _read_pairs(root: str) -> Dict[str, str]:
+    """Load backgrounds.csv as {image: background} (relative paths)."""
+    path = os.path.join(root, PAIRS_FILE)
+    if not os.path.exists(path):
+        return {}
+    with open(path, newline="") as f:
+        return {row["image"]: row["background"] for row in csv.DictReader(f)}
+
+
+def _write_pairs(pairs: Dict[str, str], root: str) -> None:
+    """Rewrite backgrounds.csv, sorted so the diffs stay readable."""
+    with open(os.path.join(root, PAIRS_FILE), "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["image", "background"])
+        for image in sorted(pairs):
+            writer.writerow([image, pairs[image]])
+
+
+def _relative(path: str, root: str) -> str:
+    """Path relative to the dataset root, always with forward slashes."""
+    return os.path.relpath(path, root).replace(os.sep, "/")
+
+
+def link_background(image_path: str, background_path: str,
+                    root: str = config.DATASET_DIR) -> None:
+    """Remember that image_path was captured in front of background_path."""
+    pairs = _read_pairs(root)
+    pairs[_relative(image_path, root)] = _relative(background_path, root)
+    _write_pairs(pairs, root)
+
+
+def unlink_background(image_path: str, root: str = config.DATASET_DIR) -> None:
+    """Forget the background of an image (used when the image is deleted)."""
+    pairs = _read_pairs(root)
+    if pairs.pop(_relative(image_path, root), None) is not None:
+        _write_pairs(pairs, root)
+
+
+def background_for(image_path: str, root: str = config.DATASET_DIR) -> Optional[np.ndarray]:
+    """
+    Background image of a dataset picture, or None if it has none.
+
+    Old images (captured before backgrounds were saved) return None, so the
+    callers can skip them or fall back to colour-only segmentation.
+    """
+    background = _read_pairs(root).get(_relative(image_path, root))
+    if background is None:
+        return None
+    return cv2.imread(os.path.join(root, background))
