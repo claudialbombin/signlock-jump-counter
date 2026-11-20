@@ -21,10 +21,10 @@ CALIBRATION_DIR = os.path.join(PROJECT_ROOT, "calibration")
 CALIBRATION_FILE = os.path.join(CALIBRATION_DIR, "camera_params.npz")
 
 # Reference images of the LSE letters (downloaded, only for visual support).
-REFERENCE_DIR = os.path.join(PROJECT_ROOT, "pasos", "referencia_lse")
+REFERENCE_DIR = os.path.join(PROJECT_ROOT, "pasos", "lse", "referencia_lse")
 
 # Our own captured images, one sub-folder per class (see step 2).
-DATASET_DIR = os.path.join(PROJECT_ROOT, "pasos", "dataset_lse")
+DATASET_DIR = os.path.join(PROJECT_ROOT, "pasos", "lse", "dataset_lse")
 
 # ---------------------------------------------------------------------------
 # Camera
