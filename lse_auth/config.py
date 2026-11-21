@@ -33,6 +33,7 @@ DATASET_DIR = os.path.join(PROJECT_ROOT, "pasos", "lse", "dataset_lse")
 CAMERA_INDEX = 0          # change to 1, 2... if the built-in webcam is not 0
 FRAME_WIDTH = 1280        # requested capture size (the camera may ignore it)
 FRAME_HEIGHT = 720
+CAMERA_FPS = 30          # requested frame rate (the project needs >= 15 FPS)
 
 # Show the image like a mirror. It feels much more natural when you are
 # looking at your own hand. Mirroring is always done AFTER undistorting,
