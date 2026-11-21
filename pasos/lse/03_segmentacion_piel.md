@@ -29,3 +29,29 @@ Requisito para la demo: **cámara quieta**. Es lo mismo que pide el bloque del t
 
 ## Entregable del paso
 Función `segment_hand(frame, background) -> mask` (resta de fondo + piel) en un nuevo módulo, p. ej. `lse_auth/segmentation.py`, con los umbrales ya ajustados y comentados.
+
+## Implementación (21/11)
+- `lse_auth/segmentation.py`:
+  - `BackgroundModel`: media de `BG_FRAMES` = 30 frames de la escena vacía; `reset()` para volver a tomarlo.
+  - `match_brightness`: la webcam cambia sola la exposición y el balance de blancos al entrar la mano (la imagen sale ~20 niveles más clara que el fondo). Se corrige con una **función de transferencia de brillo** por canal (Javed et al., 2005): para cada intervalo de valores del fondo se toma la mediana de esos mismos píxeles en el frame actual y se interpola una LUT. Una ganancia global no bastaba: la pared blanca, la verde y la madera cambian distinto.
+  - `segment_hand(frame, background)`: diferencia en YCrCb con `score = 0,5·|ΔY| + |ΔCr| + |ΔCb|` (> 25) → cierre (31 px, hecho a media resolución) + relleno de huecos → AND con el rango de piel `Cr 135–180, Cb 85–135` → apertura (5) + cierre (9). Con `debug=True` devuelve también los pasos intermedios.
+  - El relleno de huecos va **antes** del AND con la piel: así el palmar queda entero, y el agujero de la O (que es pared, no piel) se conserva.
+- Parámetros en `lse_auth/config.py` (sección *Hand segmentation*), cada uno con su justificación.
+- `lse_auth/segmentation_preview.py`: vista en directo (`f` fondo, `s` guardar secuencia, FPS en pantalla), `--dataset` (todas las imágenes con fondo) y `--sequence CLASE/img_XX.jpg` (figura para el informe).
+
+## Resultados con la segunda captura (H, O, L de Tere)
+| Clase | Imágenes | Área de la mano (px) | Mayor componente con agujero |
+|---|---|---|---|
+| H | 20 | 39.928 – 66.841 | 1/20 |
+| O | 15 | 50.214 – 51.930 | **15/15** |
+| L | 19 | 39.332 – 48.178 | 0/19 |
+
+- La O conserva el agujero en todas las imágenes, que es justo la pista que usará el Paso 4/5.
+- Tiempo: mediana **13 ms/frame** (ROI de 448×504) en el portátil de Claudia.
+- Figura de la secuencia de transformación: `pasos/lse/figuras/secuencia_O_img_40.png`.
+- **A y NONE no sirven todavía**: la cámara se movió ~18 px tras guardar el fondo, así que la resta marca todos los bordes de la pared y la estantería (pendiente de repetir, ver PR #7 / issue #6).
+
+## Limitaciones conocidas
+- Quedan restos pequeños en el borde de la estantería (esquina superior derecha del ROI); son componentes separadas y el Paso 4 se queda con la mayor.
+- La manga y el antebrazo entran por abajo del ROI: el Paso 4 tendrá que cortar a la altura de la muñeca.
+- Si la mano ocupa más de la mitad de un rango de colores del ROI, la LUT de brillo se contamina un poco (se ve como un tinte rosado en el fondo corregido). No afecta al resultado final en el dataset actual; si diera problemas, se puede estimar la LUT solo con píxeles fuera de la máscara del frame anterior.

@@ -78,3 +78,31 @@ def roi_pixels(frame_width: int, frame_height: int):
     fx, fy, fw, fh = HAND_ROI
     return (int(fx * frame_width), int(fy * frame_height),
             int(fw * frame_width), int(fh * frame_height))
+
+# ---------------------------------------------------------------------------
+# Hand segmentation (step 3)
+# ---------------------------------------------------------------------------
+# Tuned on the H, O and L images of the second capture (pasos/lse/dataset_lse,
+# background _background/bg_01.jpg). See pasos/lse/03_segmentacion_piel.md.
+
+# Frames averaged to build the background of the empty scene (~1 s at 30 fps).
+BG_FRAMES = 30
+
+# Background subtraction. The difference is measured in YCrCb as
+#   score = BG_WEIGHT_Y * |dY| + |dCr| + |dCb|
+# Luminance gets less weight because the webcam changes its exposure on its
+# own and shadows of the hand on the wall only change Y. A pixel is "changed"
+# when the (slightly blurred) score is above BG_THRESHOLD.
+BG_WEIGHT_Y = 0.5
+BG_THRESHOLD = 25
+
+# Wide skin range in YCrCb (Y is not used). It does not need to be precise:
+# it only removes what changed but is not skin (sleeve, bracelet, shadows).
+# Pale skin under this light has Cb up to ~126, hence the upper bound 135.
+SKIN_LOWER = (0, 135, 85)
+SKIN_UPPER = (255, 180, 135)
+
+# Morphology (elliptic kernels, pixels at 1280x720).
+OPEN_KERNEL = 5          # removes isolated noisy pixels
+CLOSE_KERNEL = 9         # joins small cracks in the final mask
+FG_CLOSE_KERNEL = 31     # closes the "changed" mask so the palm has no gaps
