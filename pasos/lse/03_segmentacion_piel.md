@@ -55,3 +55,12 @@ Función `segment_hand(frame, background) -> mask` (resta de fondo + piel) en un
 - Quedan restos pequeños en el borde de la estantería (esquina superior derecha del ROI); son componentes separadas y el Paso 4 se queda con la mayor.
 - La manga y el antebrazo entran por abajo del ROI: el Paso 4 tendrá que cortar a la altura de la muñeca.
 - Si la mano ocupa más de la mitad de un rango de colores del ROI, la LUT de brillo se contamina un poco (se ve como un tinte rosado en el fondo corregido). No afecta al resultado final en el dataset actual; si diera problemas, se puede estimar la LUT solo con píxeles fuera de la máscara del frame anterior.
+
+## Velocidad en directo (21/11)
+En directo Claudia veía **~5 FPS** (el guion pide tiempo real; objetivo ≥ 15 FPS). Cambios:
+- `match_brightness` sin bucles de Python: una ordenación por canal da la mediana de cada intervalo (12 ms → < 1 ms).
+- La vista previa pinta la máscara solo dentro del ROI y con OpenCV, y la secuencia de pasos intermedios solo se calcula al pulsar `s`.
+- **Captura en un hilo aparte** (`FrameGrabber`): la cámara lee mientras se procesa el frame anterior, en vez de una cosa detrás de otra.
+- Se piden 30 FPS a la cámara (`config.CAMERA_FPS`).
+
+Resultado: procesado completo (segmentación + pasos 4–6 + dibujo) **~14–17 ms/frame** → el código da para > 50 FPS. En pantalla se ve también `camara X fps | proceso Y ms`: si los FPS siguen bajos y la cámara marca pocos fps, es la webcam, que baja la frecuencia sola con poca luz (más tiempo de exposición), y se arregla con más luz.
