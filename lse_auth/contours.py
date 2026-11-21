@@ -10,12 +10,13 @@ its outer contour and its holes, and locate the palm:
   radius. Fingers are thin, so they never win against the palm. This is
   much more stable than the centroid, which moves towards the arm or the
   extended fingers.
-* A hole bigger than MIN_HOLE_AREA is the circle of the O (thumb touching
-  the index finger).
+* The holes are kept (bigger than MIN_HOLE_AREA): one of them may be the
+  circle of the O (thumb touching the index finger). Whether it really is
+  the O circle is decided in features.py, relative to the palm.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -23,7 +24,8 @@ import numpy as np
 from lse_auth import config
 
 MIN_HAND_AREA = 8000     # px at 1280x720; smaller blobs are noise, not a hand
-MIN_HOLE_AREA = 300      # px; smaller holes are gaps of the segmentation
+MIN_HOLE_AREA = 100      # px; smaller holes are noise (the size that matters
+                         # is judged later relative to the palm, in features.py)
 
 
 @dataclass
@@ -33,10 +35,14 @@ class HandContour:
     contour: np.ndarray                  # outer contour, (N, 1, 2) int32
     bbox: Tuple[int, int, int, int]      # x, y, w, h
     area: float                          # area of the outer contour
-    has_hole: bool                       # True if there is a real hole (O)
+    holes: List[np.ndarray]              # contours of the holes (O circle, gaps)
     palm_center: Tuple[int, int]         # x, y of the distance-transform max
     palm_radius: float                   # distance from the palm centre to the border
     roi: Tuple[int, int, int, int]       # ROI the mask was cut to (x, y, w, h)
+
+    @property
+    def has_hole(self) -> bool:
+        return bool(self.holes)
 
     def touches_roi_border(self, point: Tuple[int, int], margin: int = 4) -> bool:
         """True if the point lies on the edge of the ROI (the shape is cut there)."""
@@ -86,15 +92,15 @@ def find_hand_contour(mask: np.ndarray, min_area: int = MIN_HAND_AREA,
                                            offset=(ox, oy))
     outer = max((c for c, h in zip(contours, hierarchy[0]) if h[3] < 0),
                 key=cv2.contourArea)
-    has_hole = any(h[3] >= 0 and cv2.contourArea(c) > MIN_HOLE_AREA
-                   for c, h in zip(contours, hierarchy[0]))
+    holes = [c for c, h in zip(contours, hierarchy[0])
+             if h[3] >= 0 and cv2.contourArea(c) > MIN_HOLE_AREA]
 
     distance = cv2.distanceTransform(hand, cv2.DIST_L2, 5)
     _, radius, _, (cx, cy) = cv2.minMaxLoc(distance)
     center = (cx + ox, cy + oy)          # back to full-frame coordinates
 
     return HandContour(contour=outer, bbox=cv2.boundingRect(outer),
-                       area=cv2.contourArea(outer), has_hole=has_hole,
+                       area=cv2.contourArea(outer), holes=holes,
                        palm_center=center, palm_radius=float(radius),
                        roi=roi if roi is not None else
                        config.roi_pixels(mask_shape[1], mask_shape[0]))
