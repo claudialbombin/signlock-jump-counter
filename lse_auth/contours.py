@@ -20,6 +20,8 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 
+from lse_auth import config
+
 MIN_HAND_AREA = 8000     # px at 1280x720; smaller blobs are noise, not a hand
 MIN_HOLE_AREA = 300      # px; smaller holes are gaps of the segmentation
 
@@ -34,10 +36,18 @@ class HandContour:
     has_hole: bool                       # True if there is a real hole (O)
     palm_center: Tuple[int, int]         # x, y of the distance-transform max
     palm_radius: float                   # distance from the palm centre to the border
+    roi: Tuple[int, int, int, int]       # ROI the mask was cut to (x, y, w, h)
+
+    def touches_roi_border(self, point: Tuple[int, int], margin: int = 4) -> bool:
+        """True if the point lies on the edge of the ROI (the shape is cut there)."""
+        x, y, w, h = self.roi
+        px, py = point
+        return (px - x < margin or x + w - 1 - px < margin
+                or py - y < margin or y + h - 1 - py < margin)
 
 
-def find_hand_contour(mask: np.ndarray,
-                      min_area: int = MIN_HAND_AREA) -> Optional[HandContour]:
+def find_hand_contour(mask: np.ndarray, min_area: int = MIN_HAND_AREA,
+                      roi: Optional[Tuple[int, int, int, int]] = None) -> Optional[HandContour]:
     """
     Keep the biggest blob of the mask and describe it.
 
@@ -47,6 +57,8 @@ def find_hand_contour(mask: np.ndarray,
         Binary uint8 mask from segment_hand (255 = hand).
     min_area : int
         Minimum area in pixels to accept the blob as a hand.
+    roi : tuple of int, optional
+        ROI used by segment_hand. By default config.HAND_ROI.
 
     Returns
     -------
@@ -55,6 +67,7 @@ def find_hand_contour(mask: np.ndarray,
     """
     # Work only on the bounding box of the non-zero pixels (the ROI): the
     # distance transform of the full 1280x720 frame would be ~4x slower.
+    mask_shape = mask.shape
     ox, oy, bw, bh = cv2.boundingRect(mask)
     if bw == 0 or bh == 0:
         return None
@@ -82,4 +95,6 @@ def find_hand_contour(mask: np.ndarray,
 
     return HandContour(contour=outer, bbox=cv2.boundingRect(outer),
                        area=cv2.contourArea(outer), has_hole=has_hole,
-                       palm_center=center, palm_radius=float(radius))
+                       palm_center=center, palm_radius=float(radius),
+                       roi=roi if roi is not None else
+                       config.roi_pixels(mask_shape[1], mask_shape[0]))
