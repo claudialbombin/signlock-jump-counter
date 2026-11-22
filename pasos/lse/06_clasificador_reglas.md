@@ -31,6 +31,7 @@ La primera versión miraba hacia dónde apuntaba cada dedo (p. ej. "la L tiene u
 
 ### Reglas (versión 4)
 1. **Pulgar**: el último dedo (el de mayor ángulo: con la mano derecha en espejo queda a la izquierda) si está separado de su vecino **50–130°** y es **fino** (≤ 0,8 radios). Con el pulgar estirado el hueco pulgar-índice siempre es amplio; los demás dedos están mucho más juntos. Si hay agujero de O, ese "dedo" es el círculo y no el pulgar.
+   - **Pulgar levantado (22/11)**: con el índice y el pulgar los dos hacia arriba, el hueco baja a ~46° y la H se leía como **O** (tres puntas sin pulgar). Ahora también basta un hueco de **35–50°** si esa punta es claramente **más corta** que su vecina (≤ 0,9 de su longitud). El pulgar mide 0,63–0,85 del índice; en la O la punta de la izquierda es el dedo corazón, el más largo (0,99–1,18 de su vecino), así que no se confunden.
 2. Los demás dedos se cuentan. Dos dedos pegados dan una sola punta: se distinguen por la **anchura** (radios de palma): ≤ 0,65 un dedo (medido 0,45–0,60), ≥ 0,75 dos dedos (medido 0,79–0,92). Entre medias decide la dirección: la H apunta al lado (< 70°), la L hacia arriba.
 
 | Letra | Regla | Medido |
@@ -44,14 +45,14 @@ La primera versión miraba hacia dónde apuntaba cada dedo (p. ej. "la L tiene u
 - Si la mano se sale del recuadro por arriba o por los lados (`cut`), no se decide nada: con un dedo cortado una H parece una L.
 
 ### Resultados
-Dataset de Tere + 16 frames de Claudia guardados con `e` (con la letra que estaba haciendo):
+Dataset de Tere + 18 frames de Claudia guardados con `e` (con la letra que estaba haciendo):
 
 | Real \ Predicha | H | O | L | ninguna |
 |---|---|---|---|---|
 | H Tere (20) | **18** | 0 | 0 | 2 |
 | O Tere (15) | 0 | **15** | 0 | 0 |
 | L Tere (19) | 0 | 0 | **19** | 0 |
-| H Claudia (6) | **6** | 0 | 0 | 0 |
+| H Claudia (8) | **8** | 0 | 0 | 0 |
 | O Claudia (5) | 0 | **5** | 0 | 0 |
 | L Claudia (5) | 0 | 0 | **5** | 0 |
 | A (20)* | 0 | 0 | 0 | 20 |
@@ -63,7 +64,7 @@ Las dos H de Tere que fallan tienen los dedos fuera del recuadro: devuelven "nin
 
 Casos sintéticos (máscaras dibujadas, con palma de 50 y de 80 px): H pegada, H separada, H muy junta, L, O de frente, O con agujero → correctos; mano abierta, puño, "V" hacia arriba e índice solo → ninguna letra.
 
-**Ojo**: con solo 16 frames de Claudia los umbrales pueden estar ajustados a su mano; hace falta probarlo con más gente. El margen entre "un dedo" (≤ 0,60) y "dos pegados" (≥ 0,79) es estrecho.
+**Ojo**: con solo 18 frames de Claudia los umbrales pueden estar ajustados a su mano; hace falta probarlo con más gente. El margen entre "un dedo" (≤ 0,60) y "dos pegados" (≥ 0,79) es estrecho.
 
 **El fondo importa**: con la mano delante del **corcho** (color piel y brillo parecido) la resta de fondo pierde trozos de dedos (frame 150608: un dedo de la O desaparece). Subir el peso de Y o bajar el umbral recupera el dedo pero rompe muchas otras imágenes (probado: errores de 2 a 14–63). Para la demo, mejor que detrás del recuadro haya pared lisa.
 
