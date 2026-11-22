@@ -36,4 +36,6 @@ python calibration_main.py                    # offline calibration -> calibrati
 python -m lse_auth.reference_viewer           # H-O-L-A reference panel
 python -m lse_auth.capture_dataset            # capture the labelled dataset
 python -m lse_auth.capture_dataset --summary  # images per class + contact sheet
+python -m lse_auth.segmentation_preview       # live hand segmentation (f = background)
+python -m lse_auth.segmentation_preview --dataset  # segment every image with a background
 ```
