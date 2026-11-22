@@ -7,19 +7,19 @@ Usage
     python -m lse_auth.segmentation_preview --dataset      # whole dataset
     python -m lse_auth.segmentation_preview --sequence O/img_40.jpg
 
-In the live view, if the hand shows one of the letters the classifier
-already knows (H, O or L for now, step 6), the letter is written on screen
-together with the contour, the palm centre and the fingertips. A bar under
-the letter fills while the step 7 detector confirms it, and the confirmed
-letters (one per sign held, not one per frame) are listed at the bottom.
-They go to the step 8 sequence decoder: the bottom line shows the progress
-of the code (H-O-_-_) and DESBLOQUEADO once it is complete. While the A is
-not recognised, `--code HOL` tries the whole flow with a shorter code.
+The live view shows the step 9 interface (lse_auth/overlay.py): the
+BLOQUEADO / DESBLOQUEADO badge, the boxes of the code, the letter of the
+current frame with the bar that fills while step 7 confirms it, and the
+mistake messages of step 8. On top of it, the debug layer (key d) paints
+the hand mask and draws the palm, the fingertips, the finger widths and
+the number of fingers. While the A is not recognised, `--code HOL` tries
+the whole flow with a shorter code.
 
 Live controls
 -------------
     f        (re)capture the background: take the hand out of the box first
     r        clear the confirmed letters and lock again
+    d        show / hide the debug layer (mask, palm, fingertips, widths)
     s        save the transformation sequence of the current frame
     e        save the current frame + background in errores/ (when the
              letter is wrong), to reproduce it later with --errors
@@ -51,8 +51,9 @@ from lse_auth.classifier import classify
 from lse_auth.contours import find_hand_contour
 from lse_auth.features import extract_features
 from lse_auth.segmentation import BackgroundModel, segment_hand
-from lse_auth.sequence_decoder import Event, SequenceDecoder
-from lse_auth.stabilizer import State, StableLetterDetector
+from lse_auth.overlay import draw_overlay
+from lse_auth.sequence_decoder import SequenceDecoder
+from lse_auth.stabilizer import StableLetterDetector
 
 FIGURES_DIR = os.path.join(config.PROJECT_ROOT, "pasos", "lse", "figuras")
 ERRORS_DIR = os.path.join(config.PROJECT_ROOT, "errores")     # not in git (faces, rooms)
@@ -132,30 +133,38 @@ def recognise(mask: np.ndarray):
     return classify(features), hand, features
 
 
-def draw_recognition(view: np.ndarray, letter: Optional[str], hand, features) -> None:
-    """Draw contour, palm, fingertips and the recognised letter (in place)."""
+def draw_recognition(view: np.ndarray, letter: Optional[str], hand, features,
+                     show_letter: bool = True) -> None:
+    """
+    Debug drawing: palm, fingertips, widths, number of fingers (in place).
+
+    With show_letter (offline, --errors) the contour and the letter are
+    drawn too; live, they are drawn by the step 9 overlay.
+    """
     if hand is None:
         return
     color = (0, 255, 0) if letter else (0, 200, 255)
-    cv2.drawContours(view, [hand.contour], -1, color, 2, cv2.LINE_8)
     cv2.circle(view, hand.palm_center, int(hand.palm_radius), (255, 0, 0), 2)
     for tip in features.fingertips:
         cv2.line(view, hand.palm_center, tip, (255, 0, 0), 1, cv2.LINE_AA)
         cv2.circle(view, tip, 8, (0, 0, 255), -1)
 
     x, y, w, _ = config.roi_pixels(view.shape[1], view.shape[0])
-    text = letter if letter else "?"
-    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX,
-                4.0, (0, 0, 0), 14, cv2.LINE_AA)
-    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX,
-                4.0, color, 6, cv2.LINE_AA)
-    cv2.putText(view, f"{features.n_fingers} dedo{'' if features.n_fingers == 1 else 's'}", (x + w + 15, y + 150),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+    cv2.putText(view, f"{features.n_fingers} dedo{'' if features.n_fingers == 1 else 's'}",
+                (x + w + 15, y + 135), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
     # Widths in palm radii next to each tip: ~0.5 one finger, ~1 two together
     for finger in features.fingers:
         cv2.putText(view, f"{finger.width:.2f}", (finger.tip[0] + 10, finger.tip[1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
 
+    if not show_letter:
+        return
+    cv2.drawContours(view, [hand.contour], -1, color, 2, cv2.LINE_8)
+    text = letter if letter else "?"
+    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX,
+                4.0, (0, 0, 0), 14, cv2.LINE_AA)
+    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX,
+                4.0, color, 6, cv2.LINE_AA)
     # A hand cut by the box is not classified: ask to bring it inside
     if features.cut:
         cv2.putText(view, "Mete toda la mano en el recuadro", (x, y - 12),
@@ -223,39 +232,6 @@ class FrameGrabber:
     def stop(self) -> None:
         self.running = False
         self._thread.join(timeout=1.0)
-
-
-def draw_stabilizer(view: np.ndarray, detector: StableLetterDetector,
-                    decoder: SequenceDecoder) -> None:
-    """Progress of the letter being confirmed and of the code (in place)."""
-    x, y, w, _ = config.roi_pixels(view.shape[1], view.shape[0])
-    bar_x, bar_y, bar_w = x + w + 15, y + 170, 150
-    if detector.state is State.CONFIRMING:
-        cv2.rectangle(view, (bar_x, bar_y), (bar_x + bar_w, bar_y + 14), (255, 255, 255), 1)
-        cv2.rectangle(view, (bar_x, bar_y),
-                      (bar_x + int(bar_w * detector.progress), bar_y + 14), (0, 255, 0), -1)
-    elif detector.state is State.WAITING_RESET:
-        cv2.putText(view, f"{detector.confirmed} ok - cambia de letra", (bar_x, bar_y + 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
-
-    # Code progress (step 8) and the last event for 2 s
-    now = time.monotonic()
-    color = (0, 255, 0) if decoder.is_unlocked() else (255, 255, 255)
-    text = decoder.progress_text + ("   DESBLOQUEADO" if decoder.is_unlocked() else "")
-    left = decoder.time_left(now)
-    if left is not None:
-        text += f"   ({left:.0f} s)"
-    last = decoder.last_event
-    if last is not None and now - last[0] < 2.0:
-        if last[1] is Event.WRONG:
-            text, color = f"{decoder.progress_text}   Secuencia incorrecta", (0, 0, 255)
-        elif last[1] is Event.TIMEOUT:
-            text, color = f"{decoder.progress_text}   Tiempo agotado", (0, 0, 255)
-        elif last[1] in (Event.CORRECT, Event.RESTART):
-            color = (0, 255, 0)
-    org = (20, view.shape[0] - 25)
-    cv2.putText(view, text, org, cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 6, cv2.LINE_AA)
-    cv2.putText(view, text, org, cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2, cv2.LINE_AA)
 
 
 def save_error(frame: np.ndarray, background: np.ndarray) -> None:
@@ -361,6 +337,7 @@ def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
     detector = StableLetterDetector()
     decoder = SequenceDecoder(code=code.upper())
     capturing = True                       # start by learning the background
+    debug = True                           # mask, palm, fingertips, widths
     fps, proc_ms, last = 0.0, 0.0, time.perf_counter()
     cam_count, cam_fps, cam_t = 0, 0.0, time.perf_counter()
     with Camera() as cam:
@@ -380,14 +357,17 @@ def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
             else:
                 mask = segment_hand(frame, model.image)
                 letter, hand, features = recognise(mask)
-                view = overlay_mask(frame, mask)
-                draw_recognition(view, smoother.update(letter), hand, features)
+                shown = smoother.update(letter)
                 new = detector.update(letter)
                 if new is not None:
                     print(f"[stabilizer] confirmed {new}")
                     decoder.feed(new)
                 decoder.tick()
-                draw_stabilizer(view, detector, decoder)
+                view = overlay_mask(frame, mask) if debug else frame.copy()
+                if debug:
+                    draw_recognition(view, shown, hand, features, show_letter=False)
+                draw_overlay(view, hand, shown, detector, decoder,
+                             cut=bool(features and features.cut))
             proc_ms = 0.9 * proc_ms + 0.1 * 1000 * (time.perf_counter() - start)
 
             # FPS shown = frames processed per second. The camera rate and
@@ -415,6 +395,8 @@ def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
             elif key == ord("r"):
                 detector.reset()
                 decoder.reset()
+            elif key == ord("d"):
+                debug = not debug
             elif key == ord("s") and model.ready:
                 _, steps = segment_hand(frame, model.image, debug=True)
                 _save(sequence_figure(steps), f"secuencia_live_{int(time.time())}.png")
