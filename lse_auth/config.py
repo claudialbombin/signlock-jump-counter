@@ -107,3 +107,22 @@ SKIN_UPPER = (255, 180, 135)
 OPEN_KERNEL = 5          # removes isolated noisy pixels
 CLOSE_KERNEL = 9         # joins small cracks in the final mask
 FG_CLOSE_KERNEL = 31     # closes the "changed" mask so the palm has no gaps
+
+# ---------------------------------------------------------------------------
+# Temporal stabilisation (step 7)
+# ---------------------------------------------------------------------------
+# Times in seconds, not frames: the processing rate changes from one laptop
+# to another (15-30 fps), and the user feels time, not frames.
+
+# A letter is confirmed when it has been the most frequent one for
+# STABLE_CONFIRM_TIME and fills at least STABLE_MIN_SHARE of the frames of
+# that window (~15 frames at 30 fps). STABLE_MIN_FRAMES avoids confirming
+# with a handful of frames if the rate drops a lot.
+STABLE_CONFIRM_TIME = 0.5
+STABLE_MIN_SHARE = 0.8
+STABLE_MIN_FRAMES = 6
+
+# After a confirmation, the same letter has to disappear (hand out, or a
+# different letter / no letter) for STABLE_RESET_TIME before the next letter
+# can be confirmed, so holding the H does not count as H, H, H...
+STABLE_RESET_TIME = 0.3
