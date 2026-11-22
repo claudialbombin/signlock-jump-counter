@@ -9,11 +9,14 @@ Usage
 
 In the live view, if the hand shows one of the letters the classifier
 already knows (H, O or L for now, step 6), the letter is written on screen
-together with the contour, the palm centre and the fingertips.
+together with the contour, the palm centre and the fingertips. A bar under
+the letter fills while the step 7 detector confirms it, and the confirmed
+letters (one per sign held, not one per frame) are listed at the bottom.
 
 Live controls
 -------------
     f        (re)capture the background: take the hand out of the box first
+    r        clear the list of confirmed letters
     s        save the transformation sequence of the current frame
     e        save the current frame + background in errores/ (when the
              letter is wrong), to reproduce it later with --errors
@@ -45,6 +48,7 @@ from lse_auth.classifier import classify
 from lse_auth.contours import find_hand_contour
 from lse_auth.features import extract_features
 from lse_auth.segmentation import BackgroundModel, segment_hand
+from lse_auth.stabilizer import State, StableLetterDetector
 
 FIGURES_DIR = os.path.join(config.PROJECT_ROOT, "pasos", "lse", "figuras")
 ERRORS_DIR = os.path.join(config.PROJECT_ROOT, "errores")     # not in git (faces, rooms)
@@ -157,7 +161,8 @@ def draw_recognition(view: np.ndarray, letter: Optional[str], hand, features) ->
 class LetterSmoother:
     """
     Majority vote over the last frames, so a single bad frame does not
-    change the letter on screen (a first, simple version of step 7).
+    change the letter on screen. It only makes the display calm: the
+    letters that count are the ones confirmed by StableLetterDetector.
 
     A letter is shown only when it wins at least MIN_SHARE of the window.
     """
@@ -214,6 +219,26 @@ class FrameGrabber:
     def stop(self) -> None:
         self.running = False
         self._thread.join(timeout=1.0)
+
+
+def draw_stabilizer(view: np.ndarray, detector: StableLetterDetector,
+                    confirmed: List[str], flash: float) -> None:
+    """Progress of the letter being confirmed and the confirmed letters (in place)."""
+    x, y, w, _ = config.roi_pixels(view.shape[1], view.shape[0])
+    bar_x, bar_y, bar_w = x + w + 15, y + 170, 150
+    if detector.state is State.CONFIRMING:
+        cv2.rectangle(view, (bar_x, bar_y), (bar_x + bar_w, bar_y + 14), (255, 255, 255), 1)
+        cv2.rectangle(view, (bar_x, bar_y),
+                      (bar_x + int(bar_w * detector.progress), bar_y + 14), (0, 255, 0), -1)
+    elif detector.state is State.WAITING_RESET:
+        cv2.putText(view, f"{detector.confirmed} ok - cambia de letra", (bar_x, bar_y + 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
+
+    text = "Confirmadas: " + (" ".join(confirmed) if confirmed else "-")
+    org = (20, view.shape[0] - 25)
+    color = (0, 255, 0) if flash > 0 else (255, 255, 255)
+    cv2.putText(view, text, org, cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 6, cv2.LINE_AA)
+    cv2.putText(view, text, org, cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 2, cv2.LINE_AA)
 
 
 def save_error(frame: np.ndarray, background: np.ndarray) -> None:
@@ -316,6 +341,9 @@ def run_live() -> None:
 
     model = BackgroundModel()
     smoother = LetterSmoother()
+    detector = StableLetterDetector()
+    confirmed: List[str] = []              # last confirmed letters (step 7)
+    flash_until = 0.0                      # highlight the list after a confirmation
     capturing = True                       # start by learning the background
     fps, proc_ms, last = 0.0, 0.0, time.perf_counter()
     cam_count, cam_fps, cam_t = 0, 0.0, time.perf_counter()
@@ -338,6 +366,13 @@ def run_live() -> None:
                 letter, hand, features = recognise(mask)
                 view = overlay_mask(frame, mask)
                 draw_recognition(view, smoother.update(letter), hand, features)
+                new = detector.update(letter)
+                if new is not None:
+                    confirmed = (confirmed + [new])[-8:]
+                    flash_until = time.perf_counter() + 0.5
+                    print(f"[stabilizer] confirmed {new} -> {' '.join(confirmed)}")
+                draw_stabilizer(view, detector, confirmed,
+                                flash_until - time.perf_counter())
             proc_ms = 0.9 * proc_ms + 0.1 * 1000 * (time.perf_counter() - start)
 
             # FPS shown = frames processed per second. The camera rate and
@@ -360,7 +395,11 @@ def run_live() -> None:
                 break
             if key == ord("f"):
                 model.reset()
+                detector.reset()
                 capturing = True
+            elif key == ord("r"):
+                confirmed = []
+                detector.reset()
             elif key == ord("s") and model.ready:
                 _, steps = segment_hand(frame, model.image, debug=True)
                 _save(sequence_figure(steps), f"secuencia_live_{int(time.time())}.png")

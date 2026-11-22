@@ -14,8 +14,12 @@ and with the distance to the camera):
    mirrored image it is on the left) is the extended thumb when it is
    THUMB_GAP..THUMB_MAX_GAP degrees away from its neighbour and thin
    (THUMB_MAX_WIDTH). With the
-   thumb extended the thumb-index angle is always wide; the other fingers
-   are much closer to each other. In the O the "last finger" may be the
+   thumb extended the thumb-index angle is usually wide; the other fingers
+   are much closer to each other. If the index points up and the thumb
+   too, the gap can drop to ~46 deg; then a gap of SHORT_THUMB_GAP is
+   enough when the tip is clearly SHORTER than its neighbour (thumb /
+   index measured 0.63-0.85, while in an O the leftmost tip is the middle
+   finger, the longest: 0.99-1.18). In the O the "last finger" may be the
    thumb-index circle sticking out: it is not a thumb when there is an
    O-circle hole.
 2. The other fingers are counted. Two fingers pressed together give one
@@ -48,7 +52,9 @@ Measured (widths in palm radii, angles in degrees):
     L  Tere: index 0.45-0.55 at 92-97 deg, thumb gap ~65
        Claudia: index 0.45-0.60 at 94-114 deg, thumb 0.23-0.63
     H  Tere: fingers apart at ~20 and ~45 deg, thumb gap ~68
-       Claudia: fingers together 0.80-0.92 at 36-40 deg
+       Claudia: fingers together 0.80-0.92 at 36-40 deg; fingers apart
+       with index and thumb up: index 73 deg, thumb 119 deg (gap 46),
+       thumb length 0.78 of the index
     O  Tere: 3 tips (gaps ~35, ~22) + circle hole at ~139 deg
        Claudia from the front: 3 tips 15 deg apart, no hole
        Claudia turned: 3 tips + circle tip at ~171 deg + hole at ~150 deg
@@ -59,6 +65,8 @@ from typing import List, Optional, Tuple
 from lse_auth.features import Finger, HandFeatures
 
 THUMB_GAP = 50.0           # thumb-index measured 63-95
+SHORT_THUMB_GAP = 35.0     # ...or this much if the tip is also clearly shorter:
+THUMB_MAX_LENGTH_RATIO = 0.9  # thumb/index length 0.63-0.85, O leftmost tip 0.99-1.18
 THUMB_MAX_GAP = 130.0      # wider than this is not a hand (e.g. a strip of wall)
 THUMB_MAX_WIDTH = 0.8      # palm radii; thumbs measured 0.46-0.63, knuckles of a fist ~1.5
 SINGLE_MAX_WIDTH = 0.65    # one finger measured 0.45-0.60 palm radii
@@ -83,8 +91,11 @@ def split_thumb(features: HandFeatures) -> Tuple[Optional[Finger], List[Finger]]
     if len(fingers) < 2:
         return None, list(fingers)
     last, previous = fingers[-1], fingers[-2]
-    if (THUMB_GAP <= last.angle - previous.angle <= THUMB_MAX_GAP
-            and last.width <= THUMB_MAX_WIDTH):
+    gap = last.angle - previous.angle
+    wide_gap = THUMB_GAP <= gap <= THUMB_MAX_GAP
+    short_thumb = (SHORT_THUMB_GAP <= gap < THUMB_GAP
+                   and last.length <= THUMB_MAX_LENGTH_RATIO * previous.length)
+    if (wide_gap or short_thumb) and last.width <= THUMB_MAX_WIDTH:
         if features.o_hole:
             return None, list(fingers[:-1])
         return last, list(fingers[:-1])
