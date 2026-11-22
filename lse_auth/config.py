@@ -126,3 +126,13 @@ STABLE_MIN_FRAMES = 6
 # different letter / no letter) for STABLE_RESET_TIME before the next letter
 # can be confirmed, so holding the H does not count as H, H, H...
 STABLE_RESET_TIME = 0.3
+
+# ---------------------------------------------------------------------------
+# Sequence decoder (step 8)
+# ---------------------------------------------------------------------------
+# Letters to show, in order, to unlock the jump counter.
+UNLOCK_SEQUENCE = ("H", "O", "L", "A")
+
+# If the sequence is started but not finished within this time (seconds
+# since the last correct letter), it is forgotten and has to start again.
+SEQUENCE_TIMEOUT = 30.0
