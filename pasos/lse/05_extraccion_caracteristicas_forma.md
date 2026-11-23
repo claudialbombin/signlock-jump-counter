@@ -35,6 +35,9 @@ En vez de contar *convexity defects* (sensibles a pequeños entrantes del contor
   - **longitud** (punta–centro).
 - **Agujero de la O** (`o_hole`): un agujero de al menos 0,08 radios² en el lado del pulgar (90–200°). Los huecos falsos de la segmentación son más pequeños (0,01–0,05) y salen en otro sitio.
 - Todo va dividido por el radio de la palma, así no depende de lo lejos que esté la mano.
+- **Para la A (23/11)**: un puño no tiene ningún dedo estirado, así que hacen falta dos números más:
+  - **solidez** = área / área de la envolvente convexa. El puño es compacto (0,78–0,85);
+  - **`top_extent`** = hasta dónde llega la silueta por encima del centro de la palma (puntos del contorno entre 20° y 160°), en radios de palma. En el puño los nudillos quedan justo encima de la palma (**1,22–1,51**). En una mano abierta en la que no se detectan las puntas, porque los dedos están pegados o salen movidos, la silueta sigue llegando más arriba (**1,58 o más**).
 
 Valores medidos (anchura en radios de palma):
 
@@ -47,5 +50,6 @@ Valores medidos (anchura en radios de palma):
 | O (Tere) | 19–21°, 54–58°, 76–79° / 0,38–0,53 · agujero 0,12–0,13 r² a ~139° |
 | O (Claudia, de frente) | 3 puntas a ~77°, 91° y 106° (dedos medio pegados), sin agujero |
 | O (Claudia, girada) | 3 puntas + el círculo a ~171° / 1,03 · agujero 0,24 r² a ~150° |
+| A (Claudia) | ninguna punta · solidez 0,78–0,85 · `top_extent` 1,22–1,51 |
 
-Código: `lse_auth/features.py` → `extract_features(hand) -> HandFeatures` (lista de `Finger`, `o_hole`, `cut`).
+Código: `lse_auth/features.py` → `extract_features(hand) -> HandFeatures` (lista de `Finger`, `o_hole`, `cut`, `solidity`, `top_extent`).

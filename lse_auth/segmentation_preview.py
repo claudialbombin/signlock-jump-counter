@@ -12,8 +12,8 @@ BLOQUEADO / DESBLOQUEADO badge, the boxes of the code, the letter of the
 current frame with the bar that fills while step 7 confirms it, and the
 mistake messages of step 8. On top of it, the debug layer (key d) paints
 the hand mask and draws the palm, the fingertips, the finger widths and
-the number of fingers. While the A is not recognised, `--code HOL` tries
-the whole flow with a shorter code.
+the number of fingers. `--code` changes the unlock code (H-O-L-A by
+default), e.g. `--code HO` to try the flow quickly.
 
 Live controls
 -------------
@@ -416,7 +416,7 @@ def main() -> None:
     group.add_argument("--errors", action="store_true",
                        help="recognise the frames saved with e in errores/")
     parser.add_argument("--code", default="".join(config.UNLOCK_SEQUENCE),
-                        help="unlock code for the live view (e.g. HOL while A is not recognised)")
+                        help="unlock code for the live view (default HOLA)")
     args = parser.parse_args()
 
     if args.dataset:

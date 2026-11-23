@@ -39,3 +39,7 @@ Con la primera tanda de fotos se vio que el color de piel por sí solo no basta:
 `backgrounds.csv` guarda qué fondo corresponde a cada imagen (`image,background`, rutas relativas a esta carpeta). Las imágenes antiguas sin fondo no aparecen en él.
 
 `<clase>/img_XX.jpg`, JPEG calidad 95 (un PNG de 1280x720 ocupa ~10 veces más y haría el repo muy pesado; para segmentar piel no hay diferencia apreciable).
+
+## Privacidad
+
+En las fotos de A y NONE de Claudia (`A/img_53–72`, `NONE/img_58–82`) y en su fondo (`_background/bg_06.jpg`) **todo lo que queda fuera del recuadro está en negro**, con un margen de 40 px alrededor del recuadro. Así no sale la cara en el repo, que es público. El Paso 3 y los siguientes solo miran dentro del recuadro, así que los resultados no cambian: se ha comprobado que todas las imágenes dan la misma letra antes y después del recorte. Los originales completos no se suben.

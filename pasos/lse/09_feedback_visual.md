@@ -47,7 +47,7 @@ La firma cambia un poco respecto al plan:
 - **Coste**: unos rectángulos, un contorno y algo de texto. Medido en 1280×720: **~1,4 ms por frame**, frente a los ~15 ms del resto del procesado, así que no baja la tasa de refresco. `tests/test_overlay.py` comprueba que se queda por debajo de 5 ms.
 
 ### Preview
-`python -m lse_auth.segmentation_preview` (o con `--code HOL` mientras no esté la A) dibuja siempre el overlay del Paso 9. Por encima va una capa de depuración:
+`python -m lse_auth.segmentation_preview` (H-O-L-A por defecto; `--code` para probar con otro código) dibuja siempre el overlay del Paso 9. Por encima va una capa de depuración:
 - la máscara pintada de verde;
 - la palma, las puntas y las anchuras;
 - el número de dedos.

@@ -46,7 +46,7 @@ Recibe las letras **ya confirmadas** por el `StableLetterDetector` del Paso 7, q
 `is_unlocked()`, `expected` (siguiente letra), `progress_text` (`"H-O-_-_"`), `last_event` (para mostrar "Secuencia incorrecta" unos segundos) y `time_left()` (segundos hasta que se olvide la secuencia).
 
 ### La A todavía no se reconoce
-Hasta que estén las fotos nuevas de la A (issue #6), con H-O-L-A no se puede desbloquear. Para probar el flujo completo en directo, el preview acepta un código distinto:
+Hasta que estuvieron las fotos nuevas de la A (23/11) no se podía desbloquear con H-O-L-A, así que el preview acepta un código distinto. Ahora la A ya se reconoce (Paso 6) y el código por defecto es H-O-L-A, pero la opción sigue siendo útil para probar más rápido:
 
 ```
 python -m lse_auth.segmentation_preview --code HOL
