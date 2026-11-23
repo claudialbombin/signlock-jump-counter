@@ -17,3 +17,5 @@ pasos/tracker/videos_referencia/*.avi
 # Generated plots / CSVs
 pasos/tracker/results/
 pasos/tracker/Guia_Tracker_Siguientes_Pasos.*
+# Frames saved with the e key of the segmentation preview (faces, rooms)
+errores/

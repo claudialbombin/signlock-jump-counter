@@ -17,3 +17,11 @@ Paso 3 (`segment_skin`) funcionando y devolviendo máscaras limpias.
 
 ## Entregable del paso
 Función `find_hand_contour(mask) -> contour, bbox, has_hole` en `lse_auth/segmentation.py` (o `contours.py`).
+
+## Implementación (21/11)
+- `lse_auth/contours.py` → `find_hand_contour(mask) -> HandContour | None` con `contour`, `bbox`, `area`, `has_hole`, `palm_center`, `palm_radius`.
+- Se queda con la **componente conexa más grande** (descarta los restos del borde de la estantería) y exige un área mínima de 8000 px para considerarla mano.
+- `RETR_CCOMP` da el contorno exterior y sus agujeros; un agujero > 300 px es el círculo de la O.
+- **Centro de la palma** = máximo de la transformada de distancia, y su valor es el radio de la palma. Es mucho más estable que el centroide, que se va hacia el brazo o los dedos.
+- Para ir rápido se trabaja solo en el rectángulo que contiene la máscara: los pasos 4–6 tardan ~3 ms/frame.
+- `HandContour.roi` guarda el recuadro y `touches_roi_border(p)` dice si un punto está en su borde: lo usa el Paso 5 para no tomar por dedo una forma cortada por el recuadro.

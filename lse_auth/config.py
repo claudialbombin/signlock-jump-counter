@@ -33,6 +33,7 @@ DATASET_DIR = os.path.join(PROJECT_ROOT, "pasos", "lse", "dataset_lse")
 CAMERA_INDEX = 0          # change to 1, 2... if the built-in webcam is not 0
 FRAME_WIDTH = 1280        # requested capture size (the camera may ignore it)
 FRAME_HEIGHT = 720
+CAMERA_FPS = 30          # requested frame rate (the project needs >= 15 FPS)
 
 # Show the image like a mirror. It feels much more natural when you are
 # looking at your own hand. Mirroring is always done AFTER undistorting,
@@ -106,3 +107,32 @@ SKIN_UPPER = (255, 180, 135)
 OPEN_KERNEL = 5          # removes isolated noisy pixels
 CLOSE_KERNEL = 9         # joins small cracks in the final mask
 FG_CLOSE_KERNEL = 31     # closes the "changed" mask so the palm has no gaps
+
+# ---------------------------------------------------------------------------
+# Temporal stabilisation (step 7)
+# ---------------------------------------------------------------------------
+# Times in seconds, not frames: the processing rate changes from one laptop
+# to another (15-30 fps), and the user feels time, not frames.
+
+# A letter is confirmed when it has been the most frequent one for
+# STABLE_CONFIRM_TIME and fills at least STABLE_MIN_SHARE of the frames of
+# that window (~15 frames at 30 fps). STABLE_MIN_FRAMES avoids confirming
+# with a handful of frames if the rate drops a lot.
+STABLE_CONFIRM_TIME = 0.5
+STABLE_MIN_SHARE = 0.8
+STABLE_MIN_FRAMES = 6
+
+# After a confirmation, the same letter has to disappear (hand out, or a
+# different letter / no letter) for STABLE_RESET_TIME before the next letter
+# can be confirmed, so holding the H does not count as H, H, H...
+STABLE_RESET_TIME = 0.3
+
+# ---------------------------------------------------------------------------
+# Sequence decoder (step 8)
+# ---------------------------------------------------------------------------
+# Letters to show, in order, to unlock the jump counter.
+UNLOCK_SEQUENCE = ("H", "O", "L", "A")
+
+# If the sequence is started but not finished within this time (seconds
+# since the last correct letter), it is forgotten and has to start again.
+SEQUENCE_TIMEOUT = 30.0

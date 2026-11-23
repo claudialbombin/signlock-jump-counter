@@ -182,7 +182,7 @@ def _read_pairs(root: str) -> Dict[str, str]:
 def _write_pairs(pairs: Dict[str, str], root: str) -> None:
     """Rewrite backgrounds.csv, sorted so the diffs stay readable."""
     with open(os.path.join(root, PAIRS_FILE), "w", newline="") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, lineterminator="\n")   # same line ends on every OS
         writer.writerow(["image", "background"])
         for image in sorted(pairs):
             writer.writerow([image, pairs[image]])
