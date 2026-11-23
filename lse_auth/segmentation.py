@@ -98,7 +98,7 @@ def match_brightness(background: np.ndarray, frame: np.ndarray,
 
     For each BGR channel the background values are grouped in bins and,
     for every bin, the median value of the same pixels in the current
-    frame is taken. Interpolating those medians gives a look-up table
+    frame is taken (vectorised with one sort per channel). Interpolating those medians gives a look-up table
     (brightness transfer function) that is applied to the background.
     The median ignores the pixels covered by the hand as long as the hand
     is less than half of each bin, which holds because most of the ROI is
@@ -125,13 +125,17 @@ def match_brightness(background: np.ndarray, frame: np.ndarray,
     for ch in range(3):
         bg_values = background[::step, ::step, ch].ravel()
         fr_values = frame[::step, ::step, ch].ravel()
-        bins = bg_values // bin_size
-        xs, ys = [], []
-        for b in np.unique(bins):
-            sel = bins == b
-            if sel.sum() >= min_pixels:
-                xs.append(np.median(bg_values[sel]))
-                ys.append(np.median(fr_values[sel]))
+        bins = (bg_values // bin_size).astype(np.int32)
+        counts = np.bincount(bins, minlength=256 // bin_size)
+        # Median of the frame values of each bin without a Python loop:
+        # sort by (bin, frame value) and take the middle element of each bin.
+        ordered = np.sort(bins * 256 + fr_values.astype(np.int32))
+        starts = np.cumsum(counts) - counts
+        valid = np.where(counts >= min_pixels)[0]
+        ys = ordered[starts[valid] + counts[valid] // 2] - valid * 256
+        # Background value of each bin: its mean (inside a narrow bin the
+        # mean and the median are practically the same)
+        xs = np.bincount(bins, weights=bg_values, minlength=len(counts))[valid] / counts[valid]
         if len(xs) < 2:            # not enough information: leave it as is
             matched[..., ch] = background[..., ch]
             continue

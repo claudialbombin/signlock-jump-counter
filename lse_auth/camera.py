@@ -99,6 +99,9 @@ class Camera:
 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        # Ask for 30 fps. Many webcams lower the frame rate on their own in
+        # dim light (longer exposure), whatever is requested here.
+        self.cap.set(cv2.CAP_PROP_FPS, config.CAMERA_FPS)
         real_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         real_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.frame_size = (real_w, real_h)
