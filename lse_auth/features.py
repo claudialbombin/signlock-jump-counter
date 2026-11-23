@@ -32,8 +32,13 @@ the outer contour:
 Everything is divided by the palm radius, so the features do not depend on
 how far the hand is from the camera.
 
-Solidity (area / convex hull area) and aspect ratio are kept too: they
-will help with A (closed fist, high solidity) once its images are valid.
+For the A (closed fist, no finger) two more numbers matter:
+* solidity: area / convex hull area. A fist is compact (0.78-0.85).
+* top_extent: how far the silhouette reaches above the palm centre (contour
+  points between 20 and 160 deg), in palm radii. In a fist the knuckles are
+  right on top of the palm (1.22-1.51); an open hand whose fingers are not
+  found (pressed together or blurred by movement) still reaches 1.58+.
+The aspect ratio of the bounding box is kept for reference.
 """
 
 import math
@@ -80,6 +85,7 @@ class HandFeatures:
     o_hole: bool = False            # a hole that looks like the O circle
     solidity: float = 0.0
     aspect_ratio: float = 0.0       # bbox width / height
+    top_extent: float = 0.0         # reach above the palm centre, palm radii
 
     @property
     def n_fingers(self) -> int:
@@ -180,6 +186,19 @@ def is_o_circle(hand: HandContour) -> bool:
     return False
 
 
+TOP_ANGLES = (20.0, 160.0)   # "above the palm" for top_extent
+
+
+def top_extent(hand: HandContour) -> float:
+    """Farthest contour point above the palm centre, in palm radii."""
+    pts = hand.contour[:, 0, :].astype(np.float32)
+    cx, cy = hand.palm_center
+    angles = np.degrees(np.arctan2(cy - pts[:, 1], pts[:, 0] - cx))
+    dist = np.hypot(pts[:, 0] - cx, pts[:, 1] - cy)
+    above = dist[(angles >= TOP_ANGLES[0]) & (angles <= TOP_ANGLES[1])]
+    return float(above.max() / hand.palm_radius) if len(above) else 0.0
+
+
 def extract_features(hand: HandContour) -> HandFeatures:
     """Compute every feature of one hand silhouette."""
     hull_area = cv2.contourArea(cv2.convexHull(hand.contour))
@@ -191,4 +210,5 @@ def extract_features(hand: HandContour) -> HandFeatures:
         o_hole=is_o_circle(hand),
         solidity=hand.area / hull_area if hull_area else 0.0,
         aspect_ratio=w / h if h else 0.0,
+        top_extent=round(top_extent(hand), 2),
     )
