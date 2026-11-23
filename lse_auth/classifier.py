@@ -1,10 +1,9 @@
 """
-Step 6 - Rule-based classifier (first version: H, O and L).
+Step 6 - Rule-based classifier for H, O, L and A.
 
-Only H, O and L are recognised for now: they are the letters with valid
-images (A and NONE have to be recaptured, see PR #7). Everything else
-returns None ("no letter"), which is the safe answer for the sequence
-decoder: it is better to miss a frame than to accept a wrong letter.
+Everything that is not one of the four letters returns None ("no
+letter"), which is the safe answer for the sequence decoder: it is better
+to miss a frame than to accept a wrong letter.
 
 The rules look at the STRUCTURE of the hand, not at absolute angles or
 absolute sizes (both change from one person to another, with the wrist
@@ -36,17 +35,34 @@ and with the distance to the camera):
     L  thumb + 1 finger (the index)
     H  thumb + 2 fingers less than H_MAX_GAP apart pointing to the side,
        or thumb + 1 finger as wide as two
-    O  no thumb + 3 fingertips (middle, ring, little finger),
-       or no thumb + 2 fingertips when one of them is twice as wide as the
-       other (two of them pressed together),
-       or an O-circle hole + at least 2 fingertips besides the circle
-       (with the hole, extra short tips around the circle are tolerated).
-       The hole is not required: seen from the front, the circle is often
-       not visible. At least one of the fingertips must be thin
-       (FINGER_MAX_WIDTH): the bumps of a fist are not fingers.
+    O  an O-circle hole + at least 2 fingertips besides the circle
+       (with the hole, extra short tips around the circle are tolerated),
+       or, without the hole (seen from the front the circle is often not
+       visible), no thumb and the three fingers CLOSE together:
+         3 fingertips spread over at most O_MAX_SPAN degrees, or
+         2 fingertips at most O_PAIR_MAX_GAP apart, one of them twice as
+         wide as the other (two of them pressed together).
+       At least one of the fingertips must be thin (FINGER_MAX_WIDTH): the
+       bumps of a fist are not fingers.
+       (The closeness was added with the NONE images: an open hand with the
+       palm to the camera has its thumb on the other side, so "no thumb +
+       3 tips" alone read 8 of 25 of them as O. Their tips are 39-41 deg
+       apart (2 tips) or spread 45-134 deg (3 tips); the O without hole
+       measured 20 deg (2 tips) and 30 deg (3 tips).)
+    A  no finger at all, compact (solidity >= A_MIN_SOLIDITY) and nothing
+       reaching far above the palm (top_extent <= A_MAX_TOP_EXTENT): the
+       knuckles of a fist are right on top of the palm (1.22-1.51 palm
+       radii), while an open hand whose fingers are not found (pressed
+       together or blurred by movement) still reaches 1.58+.
 
 If the hand leaves the ROI above the palm (features.cut) nothing is
 returned: with a finger cut by the box an H looks like an L.
+
+The two fingers of an H that are apart must both be single fingers
+(<= FINGER_MAX_WIDTH): with one of them twice as wide it is three fingers
+plus the thumb (an open hand), not an H. Two tips less than
+H_SAME_PAIR_GAP apart are the pressed pair seen as two bumps, and count
+as an H whatever their width.
 
 Measured (widths in palm radii, angles in degrees):
     L  Tere: index 0.45-0.55 at 92-97 deg, thumb gap ~65
@@ -55,6 +71,8 @@ Measured (widths in palm radii, angles in degrees):
        Claudia: fingers together 0.80-0.92 at 36-40 deg; fingers apart
        with index and thumb up: index 73 deg, thumb 119 deg (gap 46),
        thumb length 0.78 of the index
+    A  Claudia: fist with the arm from below, 0 fingers, solidity
+       0.78-0.85, top_extent 1.22-1.51
     O  Tere: 3 tips (gaps ~35, ~22) + circle hole at ~139 deg
        Claudia from the front: 3 tips 15 deg apart, no hole
        Claudia turned: 3 tips + circle tip at ~171 deg + hole at ~150 deg
@@ -74,7 +92,12 @@ PAIR_MIN_WIDTH = 0.75      # two fingers pressed together measured 0.79-0.92
 SIDEWAYS_MAX_ANGLE = 70.0  # in between, a finger pointing to the side is the H pair
 O_PAIR_RATIO = 1.6         # in an O with 2 tips, one is a pair if this much wider
 H_MAX_GAP = 45.0           # index-middle measured ~25
+H_SAME_PAIR_GAP = 15.0     # closer tips are the pressed pair seen as two bumps (measured 10)
 FINGER_MAX_WIDTH = 0.8     # an O needs at least one finger this thin (fist bumps ~1.5)
+O_MAX_SPAN = 38.0          # 3 O tips measured 30 deg; open hands 45-134
+O_PAIR_MAX_GAP = 30.0      # 2 O tips measured 20 deg; open hands 39-41
+A_MIN_SOLIDITY = 0.75      # fist 0.78-0.85
+A_MAX_TOP_EXTENT = 1.55    # fist 1.22-1.51 palm radii; open or blurred hand without tips 1.58+
 
 
 def split_thumb(features: HandFeatures) -> Tuple[Optional[Finger], List[Finger]]:
@@ -116,13 +139,21 @@ def classify(features: HandFeatures) -> Optional[str]:
     thumb, others = split_thumb(features)
 
     if thumb is None:
-        if not others or min(f.width for f in others) > FINGER_MAX_WIDTH:
+        if not others:
+            if (not features.o_hole and features.solidity >= A_MIN_SOLIDITY
+                    and features.top_extent <= A_MAX_TOP_EXTENT):
+                return "A"         # closed fist
+            return None
+        if min(f.width for f in others) > FINGER_MAX_WIDTH:
             return None            # only fat bumps (a fist): no real finger
-        if len(others) == 3 or (features.o_hole and len(others) >= 2):
+        if features.o_hole and len(others) >= 2:
             return "O"
-        if len(others) == 2:
+        span = others[-1].angle - others[0].angle
+        if len(others) == 3 and span <= O_MAX_SPAN:
+            return "O"
+        if len(others) == 2 and span <= O_PAIR_MAX_GAP:
             narrow, wide = sorted(f.width for f in others)
-            if features.o_hole or wide >= O_PAIR_RATIO * narrow:
+            if wide >= O_PAIR_RATIO * narrow:
                 return "O"
         return None
 
@@ -136,7 +167,10 @@ def classify(features: HandFeatures) -> Optional[str]:
             return "L"
         # In between: H points to the side, L points up (step 1 decisions)
         return "H" if finger.angle < SIDEWAYS_MAX_ANGLE else "L"
-    if (len(others) == 2 and others[1].angle - others[0].angle < H_MAX_GAP
-            and others[1].angle < SIDEWAYS_MAX_ANGLE + 10):
-        return "H"                 # two fingers apart, to the side (a "V" up is not H)
+    if len(others) == 2 and others[1].angle < SIDEWAYS_MAX_ANGLE + 10:
+        gap = others[1].angle - others[0].angle
+        if gap <= H_SAME_PAIR_GAP:
+            return "H"             # the pressed pair seen as two bumps
+        if gap < H_MAX_GAP and max(f.width for f in others) <= FINGER_MAX_WIDTH:
+            return "H"             # two single fingers apart, to the side (a "V" up is not H)
     return None
