@@ -10,6 +10,7 @@ program runs, we compute the maps ONCE with cv2.initUndistortRectifyMap()
 and then each frame only needs a cv2.remap(), which is much cheaper.
 """
 
+import threading
 from typing import Optional, Tuple
 
 import cv2
@@ -143,3 +144,49 @@ class Camera:
 
     def __exit__(self, *exc) -> None:
         self.release()
+
+
+class FrameGrabber:
+    """
+    Read the camera in a background thread and keep only the newest frame.
+
+    Without it, the loop waits for the camera (reading + undistorting) and
+    then for the processing, one after the other. With it both happen at
+    the same time and the processing always gets the most recent frame.
+
+    Moved here from segmentation_preview (step 10) so the unlock loop and
+    the preview share it. Call stop() before releasing the camera.
+    """
+
+    def __init__(self, cam) -> None:
+        self.cam = cam
+        self.frame: Optional[np.ndarray] = None
+        self.count = 0                    # frames delivered by the camera
+        self.running = True
+        self._lock = threading.Lock()
+        self._new = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while self.running:
+            frame = self.cam.read()
+            if frame is None:
+                self.running = False
+                break
+            with self._lock:
+                self.frame = frame
+                self.count += 1
+            self._new.set()
+
+    def read(self, timeout: float = 2.0) -> Optional[np.ndarray]:
+        """Newest frame not returned yet (waits for it), or None if the camera stopped."""
+        if not self._new.wait(timeout) or not self.running:
+            return None
+        with self._lock:
+            self._new.clear()
+            return self.frame
+
+    def stop(self) -> None:
+        self.running = False
+        self._thread.join(timeout=1.0)
