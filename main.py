@@ -4,6 +4,8 @@ SignLock + Jump Counter - entry point.
     python main.py                 # unlock with H-O-L-A, then the jump counter
     python main.py --log           # also save the unlock attempts (step 11)
     python main.py --code HO       # shorter code, to test quickly
+    python main.py --trials --log --tag natural
+                                   # step 11: unlock again and again, no tracker
 
 Flow (block diagram of the assignment):
 
@@ -66,20 +68,29 @@ def main() -> None:
                         help="unlock code (default HOLA)")
     parser.add_argument("--log", action="store_true",
                         help="save every unlock event in pasos/lse/pruebas/ (step 11)")
+    parser.add_argument("--trials", action="store_true",
+                        help="step 11 test session: lock again after every unlock, no tracker")
+    parser.add_argument("--tag", help="test condition added to the log name (e.g. natural, tere)")
     args = parser.parse_args()
 
-    log_path = default_log_path() if args.log else None
+    log_path = default_log_path(args.tag) if args.log else None
     with Camera() as cam:
         grabber = FrameGrabber(cam)
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
         try:
-            if run_unlock(grabber, WINDOW, code=args.code.upper(), log_path=log_path):
+            if args.trials:
+                # every call learns the background again and waits for the code;
+                # q ends the session
+                while run_unlock(grabber, WINDOW, code=args.code.upper(), log_path=log_path):
+                    pass
+            elif run_unlock(grabber, WINDOW, code=args.code.upper(), log_path=log_path):
                 run_tracker(grabber, WINDOW)
         finally:
             grabber.stop()
             cv2.destroyAllWindows()
     if log_path:
         print(f"Unlock events saved in {log_path}")
+        print("Results table: python -m lse_auth.trial_report")
 
 
 if __name__ == "__main__":
