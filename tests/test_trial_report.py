@@ -1,8 +1,4 @@
-"""
-Tests of the step 11 results table with hand-written event logs.
-
-Run with:  python -m pytest tests/test_trial_report.py
-"""
+# tabla del paso 11 con logs escritos a mano
 
 from lse_auth.trial_report import markdown_table, parse_session, summarise, tag_of
 
@@ -56,9 +52,9 @@ def test_timeout_and_reset(tmp_path):
                                 (50.0, "wrong", "O")])
     s = parse_session(path)
     r = summarise([s])
-    # the reset attempt is aborted: it does not count in the rate
+    # el del reset no cuenta
     assert (r["attempts"], r["timeouts"], r["unlocked"]) == (1, 1, 0)
-    assert s.stray_wrong == 1 and s.misread == {"H->O": 1}
+    assert s.stray_wrong == 1 and not s.misread
 
 
 def test_table_has_one_row_per_condition_and_a_total(tmp_path):
@@ -67,4 +63,5 @@ def test_table_has_one_row_per_condition_and_a_total(tmp_path):
     table = markdown_table({"natural": [a], "tere": [b]})
     assert "| natural | 1 | 1 | 1 | 100% |" in table
     assert "| tere |" in table and "**Total**" in table
-    assert "A->H: 1" in table
+    assert "A->H" not in table          # es suelta, no mal leida
+    assert "| tere | 1 | 0 | 0 | - | 0 | 0 | 0 | 1 |" in table
