@@ -19,3 +19,9 @@ Nada técnico de tu parte; es una decisión de coordinación. Idealmente resolve
 
 ## Entregable del paso
 Decisión documentada aquí (opción 1 o 2, y por qué) + confirmación con la persona de `feature/sign-language-auth` de que está de acuerdo.
+
+## Decisión
+Opción 1: usamos `lse_auth.camera.Camera`, importada **solo** en
+`jump_tracker/video_source.py`. No duplicamos código de cámara ni de
+calibración, y si en la integración se mueve a `core/`, solo cambia una línea.
+En la integración final (`main.py`), el tracker recibirá los frames del`FrameGrabber`, tal como define `pasos/lse/10_integracion_con_tracker.md`.

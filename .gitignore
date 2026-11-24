@@ -7,5 +7,15 @@ __pycache__/
 # macOS
 .DS_Store
 
+# Lab material (reference only, large PDFs/zips)
+Labs/
+
+# Tracker reference videos (too large for git; keep them on a shared drive)
+pasos/tracker/videos_referencia/*.mp4
+pasos/tracker/videos_referencia/*.avi
+
+# Generated plots / CSVs
+pasos/tracker/results/
+pasos/tracker/Guia_Tracker_Siguientes_Pasos.*
 # Frames saved with the e key of the segmentation preview (faces, rooms)
 errores/
