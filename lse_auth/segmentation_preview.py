@@ -51,6 +51,7 @@ from lse_auth.classifier import classify
 from lse_auth.contours import find_hand_contour
 from lse_auth.features import extract_features
 from lse_auth.segmentation import BackgroundModel, segment_hand
+from lse_auth.camera import FrameGrabber
 from lse_auth.overlay import draw_overlay
 from lse_auth.sequence_decoder import SequenceDecoder
 from lse_auth.stabilizer import StableLetterDetector
@@ -190,50 +191,6 @@ class LetterSmoother:
         return best if count >= self.min_share * self.window else None
 
 
-class FrameGrabber:
-    """
-    Read the camera in a background thread and keep only the newest frame.
-
-    Without it, the loop waits for the camera (reading + undistorting) and
-    then for the processing, one after the other. With it both happen at
-    the same time and the processing always gets the most recent frame.
-    """
-
-    def __init__(self, cam) -> None:
-        import threading
-        self.cam = cam
-        self.frame: Optional[np.ndarray] = None
-        self.count = 0                    # frames delivered by the camera
-        self.running = True
-        self._lock = threading.Lock()
-        self._new = threading.Event()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def _run(self) -> None:
-        while self.running:
-            frame = self.cam.read()
-            if frame is None:
-                self.running = False
-                break
-            with self._lock:
-                self.frame = frame
-                self.count += 1
-            self._new.set()
-
-    def read(self, timeout: float = 2.0) -> Optional[np.ndarray]:
-        """Newest frame not returned yet (waits for it), or None if the camera stopped."""
-        if not self._new.wait(timeout) or not self.running:
-            return None
-        with self._lock:
-            self._new.clear()
-            return self.frame
-
-    def stop(self) -> None:
-        self.running = False
-        self._thread.join(timeout=1.0)
-
-
 def save_error(frame: np.ndarray, background: np.ndarray) -> None:
     """Keep a misclassified frame and its background to reproduce it offline."""
     os.makedirs(ERRORS_DIR, exist_ok=True)
@@ -330,7 +287,7 @@ def run_sequence(relative_path: str) -> None:
 
 def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
     """Live view: background capture, mask overlay and FPS."""
-    from lse_auth.camera import Camera     # only needed with a camera
+    from lse_auth.camera import Camera     # opens the device: only needed live
 
     model = BackgroundModel()
     smoother = LetterSmoother()
