@@ -1,8 +1,4 @@
-"""
-Tests of the step 10 SecurityBlock with real dataset frames (no camera).
-
-Run with:  python -m pytest tests/test_security.py
-"""
+# SecurityBlock con fotos del dataset, sin camara
 
 import csv
 import os
@@ -60,11 +56,11 @@ def test_other_gestures_do_not_unlock():
 def test_draw_in_every_phase():
     security = SecurityBlock(code="A")
     background, fist = cv2.imread(BACKGROUND), cv2.imread(FIST)
-    security.draw(background.copy(), now=0.0)            # countdown
+    security.draw(background.copy(), now=0.0)
     t = learn_background(security, background)
-    security.draw(fist.copy(), now=t)                    # locked
+    security.draw(fist.copy(), now=t)
     show(security, fist, 1.0, t)
-    view = security.draw(fist.copy(), now=t + 1.0)       # unlocked
+    view = security.draw(fist.copy(), now=t + 1.0)
     assert view.shape == fist.shape
 
 
