@@ -1,27 +1,19 @@
-"""
-Step 11 - Results table from the unlock logs.
-
-`python main.py --trials --log --tag <condition>` saves every decoder event
-of a test session in pasos/lse/pruebas/sesion_<date>_<condition>.csv. This
-script reads those CSVs and builds the table of the report:
-
-    python -m lse_auth.trial_report                      # every session
-    python -m lse_auth.trial_report pasos/lse/pruebas/sesion_*_natural.csv
-    python -m lse_auth.trial_report --out pasos/lse/pruebas/resultados.md
-
-How an attempt is counted
--------------------------
-During a test session the user is always trying to spell the code, so:
-
-* An attempt starts with the first correct letter (or a restart).
-* It ends with `unlocked` (success), `wrong` (a letter that was not the
-  expected one: a false reset), `restart` (the first letter of the code
-  arrived in the middle: the attempt is lost, a new one starts), `timeout`
-  or `reset` (the r key: aborted, not counted in the rate).
-* Every `wrong` or `restart` is a letter read wrongly, because the user was
-  showing the expected one. The table says which letter was expected and
-  which one was read (e.g. O->H).
-"""
+# Step 11: results table from the session logs.
+#
+#   python main.py --trials --log --tag <condition>    -> pasos/lse/pruebas/sesion_*.csv
+#   python -m lse_auth.trial_report                    all sessions
+#   python -m lse_auth.trial_report pasos/lse/pruebas/sesion_*_natural.csv
+#   python -m lse_auth.trial_report --out pasos/lse/pruebas/resultados.md
+#
+# How attempts are counted (in a session you're always trying to spell the code):
+# - an attempt starts with the first correct letter (or a restart)
+# - it ends with unlocked, wrong (false reset), restart (lost, a new one
+#   starts), timeout, or reset (r key = aborted, doesn't count)
+# - wrong/restart inside an attempt = letter misread, since you were showing
+#   the expected one. We keep expected->read (e.g. O->H)
+# - wrong with no attempt open (before the first letter or right after a
+#   failed one) = "loose letter", probably the hand moving between signs,
+#   so it's counted apart. In the impostor session all letters are these
 
 import argparse
 import csv
@@ -30,7 +22,6 @@ import os
 import statistics
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
 
 from lse_auth import config
 
@@ -40,11 +31,11 @@ LOG_DIR = os.path.join(config.PROJECT_ROOT, "pasos", "lse", "pruebas")
 @dataclass
 class Attempt:
     start: float
-    end: Optional[float] = None
-    result: Optional[str] = None        # unlocked, wrong, restart, timeout, reset
+    end: float = None
+    result: str = None      # unlocked / wrong / restart / timeout / reset
 
     @property
-    def duration(self) -> Optional[float]:
+    def duration(self):
         return None if self.end is None else self.end - self.start
 
 
@@ -52,32 +43,31 @@ class Attempt:
 class Session:
     name: str
     tag: str
-    attempts: List[Attempt] = field(default_factory=list)
-    misread: Counter = field(default_factory=Counter)     # "O->H": count
-    stray_wrong: int = 0                                  # wrong letter with no attempt open
+    attempts: list = field(default_factory=list)
+    misread: Counter = field(default_factory=Counter)    # "O->H": n
+    stray_wrong: int = 0                                 # loose letters
 
-    def count(self, result: str) -> int:
+    def count(self, result):
         return sum(a.result == result for a in self.attempts)
 
     @property
-    def finished(self) -> List[Attempt]:
-        """Attempts that count for the rate (not aborted with r, not left open)."""
+    def finished(self):
+        # the ones that count for the rate: not aborted and not left open
         return [a for a in self.attempts if a.result not in (None, "reset")]
 
 
-def tag_of(path: str) -> str:
-    """sesion_20261124_101500_natural.csv -> 'natural' ('' if there is no tag)."""
+def tag_of(path):
+    # sesion_20261124_101500_natural.csv -> natural
     parts = os.path.splitext(os.path.basename(path))[0].split("_", 3)
     return parts[3] if len(parts) == 4 else ""
 
 
-def parse_session(path: str, code: Sequence[str] = config.UNLOCK_SEQUENCE) -> Session:
-    """Turn the event log of one session into attempts."""
+def parse_session(path, code=config.UNLOCK_SEQUENCE):
     session = Session(name=os.path.basename(path), tag=tag_of(path))
-    current: Optional[Attempt] = None
-    typed = 0                                   # letters of the code already shown
+    current = None
+    typed = 0
 
-    def close(t: float, result: str) -> None:
+    def close(t, result):
         nonlocal current, typed
         if current is not None:
             current.end, current.result = t, result
@@ -103,9 +93,7 @@ def parse_session(path: str, code: Sequence[str] = config.UNLOCK_SEQUENCE) -> Se
                 typed = 1
             elif event == "wrong":
                 if current is None:
-                    # wrong letter before starting: the first letter was misread
                     session.stray_wrong += 1
-                    session.misread[f"{code[0]}->{letter}"] += 1
                 else:
                     session.misread[f"{expected}->{letter}"] += 1
                     close(t, "wrong")
@@ -114,36 +102,36 @@ def parse_session(path: str, code: Sequence[str] = config.UNLOCK_SEQUENCE) -> Se
     return session
 
 
-def summarise(sessions: List[Session]) -> Dict[str, object]:
-    """Numbers of the results table for a group of sessions."""
+def summarise(sessions):
     finished = [a for s in sessions for a in s.finished]
-    unlocked = [a for a in finished if a.result == "unlocked"]
-    times = [a.duration for a in unlocked]
-    misread = sum((s.misread for s in sessions), Counter())
+    ok = [a for a in finished if a.result == "unlocked"]
+    times = [a.duration for a in ok]
+    bad = sum(s.count("wrong") + s.count("restart") for s in sessions)
     return {
         "sessions": len(sessions),
         "attempts": len(finished),
-        "unlocked": len(unlocked),
-        "rate": len(unlocked) / len(finished) if finished else None,
-        "false_resets": sum(s.count("wrong") + s.count("restart") for s in sessions),
+        "unlocked": len(ok),
+        "rate": len(ok) / len(finished) if finished else None,
+        "false_resets": bad,
         "timeouts": sum(s.count("timeout") for s in sessions),
-        "misread": sum(misread.values()),
-        "misread_pairs": misread,
+        "misread": bad,
+        "loose": sum(s.stray_wrong for s in sessions),
+        "misread_pairs": sum((s.misread for s in sessions), Counter()),
         "time_mean": statistics.mean(times) if times else None,
         "time_median": statistics.median(times) if times else None,
     }
 
 
-def _fmt(value, pattern: str) -> str:
+def _fmt(value, pattern):
     return "-" if value is None else pattern.format(value)
 
 
-def markdown_table(groups: Dict[str, List[Session]]) -> str:
-    """One row per condition (tag) plus the total."""
+def markdown_table(groups):
+    """groups = {tag: [sessions]} -> one row per tag + total"""
     lines = [
         "| Condición | Sesiones | Intentos | Desbloqueos | Tasa | Falsos resets | Timeouts "
-        "| Letras mal leídas | Tiempo medio (s) | Mediana (s) |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| Letras mal leídas | Letras sueltas | Tiempo medio (s) | Mediana (s) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     rows = list(groups.items())
     if len(rows) > 1:
@@ -156,7 +144,7 @@ def markdown_table(groups: Dict[str, List[Session]]) -> str:
         lines.append(
             f"| {name or '(sin etiqueta)'} | {r['sessions']} | {r['attempts']} | {r['unlocked']} "
             f"| {_fmt(r['rate'], '{:.0%}')} | {r['false_resets']} | {r['timeouts']} "
-            f"| {r['misread']} | {_fmt(r['time_mean'], '{:.1f}')} "
+            f"| {r['misread']} | {r['loose']} | {_fmt(r['time_mean'], '{:.1f}')} "
             f"| {_fmt(r['time_median'], '{:.1f}')} |")
     if pairs:
         lines += ["", "Letras mal leídas (esperada -> leída):", ""]
@@ -164,7 +152,7 @@ def markdown_table(groups: Dict[str, List[Session]]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser(description="Step 11 results table")
     parser.add_argument("logs", nargs="*", help="session CSVs (default: all in pasos/lse/pruebas)")
     parser.add_argument("--code", default="".join(config.UNLOCK_SEQUENCE))
@@ -174,10 +162,10 @@ def main() -> None:
     paths = sorted(args.logs or glob.glob(os.path.join(LOG_DIR, "sesion_*.csv")))
     if not paths:
         raise SystemExit(f"No session logs in {LOG_DIR}: run python main.py --trials --log")
-    groups: Dict[str, List[Session]] = {}
+    groups = {}
     for path in paths:
-        session = parse_session(path, code=tuple(args.code.upper()))
-        groups.setdefault(session.tag, []).append(session)
+        s = parse_session(path, code=tuple(args.code.upper()))
+        groups.setdefault(s.tag, []).append(s)
     table = markdown_table(groups)
     print(table)
     if args.out:
