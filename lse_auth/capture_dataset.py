@@ -1,39 +1,13 @@
-"""
-Step 2 - Capture the reference dataset of LSE hand shapes.
-
-Opens the calibrated camera, shows the live (undistorted, mirrored) image with
-the hand ROI drawn on top, and saves labelled frames into
-pasos/lse/dataset_lse/<class>/img_XX.jpg.
-
-Controls
---------
-    f             save the EMPTY scene as background (take the hand out of
-                  the box first). Mandatory at the start of every session
-                  and again whenever the camera or the light changes:
-                  step 3 subtracts it to find the hand.
-    0 .. 4        choose the class: 0 = NONE, 1 = H, 2 = O, 3 = L, 4 = A
-    c / SPACE     capture one image of the current class
-    b             burst: capture BURST_SIZE images, one every BURST_GAP frames
-                  (move the hand a little while it runs to get variety)
-    d             delete the last image captured in this session (undo)
-    q / ESC       quit
-
-Captures are refused until a background has been saved in the session, and
-every image is linked to the last background in backgrounds.csv. Keep the
-camera still for the whole session.
-
-The overlays (text, ROI box) are drawn on a COPY of the frame, so the saved
-images are clean.
-
-Usage
------
-    python -m lse_auth.capture_dataset              # live capture
-    python -m lse_auth.capture_dataset --summary    # counts + contact sheet
-"""
+# paso 2: capturar el dataset con la camara calibrada
+#   python -m lse_auth.capture_dataset            capturar
+#   python -m lse_auth.capture_dataset --summary  contar + hoja de miniaturas
+#
+# f = guardar el fondo VACIO (al empezar y si cambia la luz), 0-4 clase,
+# c/espacio = foto, b = rafaga, d = deshacer, q = salir
+# no deja hacer fotos sin fondo. No mover la camara durante la sesion
 
 import argparse
 import os
-from typing import List
 
 import cv2
 import numpy as np
@@ -42,72 +16,46 @@ from lse_auth import config, dataset
 from lse_auth.alphabet import CLASS_LABELS, LETTERS, key_to_label
 from lse_auth.camera import Camera
 
-TARGET_PER_CLASS = 20    # the plan asks for ~15-20 images per class
+TARGET_PER_CLASS = 20
 BURST_SIZE = 5
-BURST_GAP = 8            # frames between two burst captures (~0.25 s at 30 fps)
-BG_FRAMES = 30           # frames averaged for the background (~1 s), less noise
+BURST_GAP = 8          # ~0.25 s entre fotos de la rafaga
+BG_FRAMES = 30
 WINDOW = "Dataset capture - press q to quit"
 
 
-def draw_overlay(frame: np.ndarray, label: str, counts: dict,
-                 message: str, burst_left: int, has_background: bool) -> np.ndarray:
-    """
-    Draw the user interface on a copy of the frame.
-
-    Parameters
-    ----------
-    frame : np.ndarray
-        Clean frame from the camera (it is not modified).
-    label : str
-        Class currently selected.
-    counts : dict
-        Number of images already saved per class.
-    message : str
-        Last status message (e.g. the path of the last saved image).
-    burst_left : int
-        Images left in the current burst (0 if no burst is running).
-    has_background : bool
-        Whether a background was already saved in this session.
-
-    Returns
-    -------
-    np.ndarray
-        Frame with the overlay.
-    """
+def draw_overlay(frame, label, counts, message, burst_left, has_background):
     view = frame.copy()
     h, w = view.shape[:2]
 
-    # Hand ROI: the user should keep the hand inside this box
     x, y, rw, rh = config.roi_pixels(w, h)
-    roi_color = (0, 0, 255) if burst_left else (0, 255, 0)
-    cv2.rectangle(view, (x, y), (x + rw, y + rh), roi_color, 2)
+    cv2.rectangle(view, (x, y), (x + rw, y + rh), (0, 0, 255) if burst_left else (0, 255, 0), 2)
 
-    # Dark band on top so the text is readable over any background
     cv2.rectangle(view, (0, 0), (w, 70), (0, 0, 0), -1)
     cv2.putText(view, f"Class: {label}", (15, 45), cv2.FONT_HERSHEY_SIMPLEX,
                 1.3, (255, 255, 255), 3, cv2.LINE_AA)
-
     if not has_background:
         cv2.putText(view, "Empty the box and press f (background)", (x, y - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
 
-    # Counter of every class, green when the target is reached
-    x_text = 320
+    # contador de cada clase, en verde cuando ya hay suficientes
+    xt = 320
     for i, name in enumerate(CLASS_LABELS):
         n = counts.get(name, 0)
-        color = (0, 255, 0) if n >= TARGET_PER_CLASS else (200, 200, 200)
         if name == label:
             color = (0, 255, 255)
-        cv2.putText(view, f"{i}:{name} {n}", (x_text, 45),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
-        x_text += 150
+        elif n >= TARGET_PER_CLASS:
+            color = (0, 255, 0)
+        else:
+            color = (200, 200, 200)
+        cv2.putText(view, f"{i}:{name} {n}", (xt, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                    color, 2, cv2.LINE_AA)
+        xt += 150
 
-    # Dark band at the bottom too, for the hint and the status message
     cv2.rectangle(view, (0, h - 75), (w, h), (0, 0, 0), -1)
-
-    # Reminder of the expected hand shape (from step 1)
-    hint = LETTERS[label].description if label in LETTERS else \
-        "No sign: relaxed hand, other gestures or empty background."
+    if label in LETTERS:
+        hint = LETTERS[label].description
+    else:
+        hint = "No sign: relaxed hand, other gestures or empty background."
     cv2.putText(view, hint, (15, h - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                 (255, 255, 255), 2, cv2.LINE_AA)
     cv2.putText(view, message, (15, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
@@ -115,15 +63,14 @@ def draw_overlay(frame: np.ndarray, label: str, counts: dict,
     return view
 
 
-def run_capture() -> None:
-    """Main loop of the interactive capture tool."""
-    label = CLASS_LABELS[1]            # start with H
+def run_capture():
+    label = CLASS_LABELS[1]       # empezamos por la H
     counts = dataset.count_images()
-    saved_this_session: List[str] = []
+    saved = []                    # para poder deshacer con d
     message = "First take the hand out of the box and press f"
-    burst_left, frame_counter = 0, 0
-    background_path = None        # last background saved in this session
-    bg_sum, bg_left = None, 0     # running sum while averaging a background
+    burst_left, n_frame = 0, 0
+    bg_path = None
+    bg_sum, bg_left = None, 0
 
     with Camera() as cam:
         print(f"Camera at {cam.frame_size[0]}x{cam.frame_size[1]}, "
@@ -135,33 +82,30 @@ def run_capture() -> None:
             if frame is None:
                 print("No frame received (the camera may have been disconnected).")
                 break
-            frame_counter += 1
+            n_frame += 1
 
-            # Background: average BG_FRAMES frames of the empty scene
             if bg_left:
                 bg_sum += frame.astype(np.float32)
                 bg_left -= 1
                 if not bg_left:
-                    background = (bg_sum / BG_FRAMES).round().astype(np.uint8)
-                    background_path = dataset.save_background(background)
-                    message = (f"Background saved "
-                               f"({os.path.basename(background_path)}), keep the camera still")
+                    bg = (bg_sum / BG_FRAMES).round().astype(np.uint8)
+                    bg_path = dataset.save_background(bg)
+                    message = f"Background saved ({os.path.basename(bg_path)}), keep the camera still"
 
-            # Burst mode: save one frame every BURST_GAP frames
-            if burst_left and frame_counter % BURST_GAP == 0:
+            if burst_left and n_frame % BURST_GAP == 0:
                 path = dataset.save_image(frame, label)
-                dataset.link_background(path, background_path)
-                saved_this_session.append(path)
+                dataset.link_background(path, bg_path)
+                saved.append(path)
                 counts[label] += 1
                 burst_left -= 1
                 message = f"Burst: saved {os.path.basename(path)} ({burst_left} left)"
 
-            cv2.imshow(WINDOW, draw_overlay(frame, label, counts, message,
-                                            burst_left, background_path is not None))
+            cv2.imshow(WINDOW, draw_overlay(frame, label, counts, message, burst_left,
+                                            bg_path is not None))
             key = cv2.waitKey(1) & 0xFF
-
             if key in (ord("q"), 27):
                 break
+
             new_label = key_to_label(key)
             if new_label is not None:
                 label = new_label
@@ -170,56 +114,50 @@ def run_capture() -> None:
                 bg_sum = np.zeros(frame.shape, np.float32)
                 bg_left = BG_FRAMES
                 message = "Saving background, keep the box empty..."
-            elif key in (ord("c"), ord(" "), ord("b")) and background_path is None:
+            elif key in (ord("c"), ord(" "), ord("b")) and bg_path is None:
                 message = "No background yet: empty the box and press f first"
             elif key in (ord("c"), ord(" ")) and not bg_left:
                 path = dataset.save_image(frame, label)
-                dataset.link_background(path, background_path)
-                saved_this_session.append(path)
+                dataset.link_background(path, bg_path)
+                saved.append(path)
                 counts[label] += 1
                 message = f"Saved {os.path.relpath(path, config.PROJECT_ROOT)}"
             elif key == ord("b") and not burst_left and not bg_left:
                 burst_left = BURST_SIZE
                 message = "Burst started, move the hand slightly"
             elif key == ord("d"):
-                if saved_this_session:
-                    path = saved_this_session.pop()
+                if saved:
+                    path = saved.pop()
                     os.remove(path)
                     dataset.unlink_background(path)
-                    removed_label = os.path.basename(os.path.dirname(path))
-                    counts[removed_label] -= 1
+                    counts[os.path.basename(os.path.dirname(path))] -= 1
                     message = f"Deleted {os.path.relpath(path, config.PROJECT_ROOT)}"
                 else:
                     message = "Nothing to delete in this session"
 
     cv2.destroyAllWindows()
-    print(f"{len(saved_this_session)} images saved in this session.")
+    print(f"{len(saved)} images saved in this session.")
     print_summary()
 
 
-def print_summary(save_sheet: bool = False) -> None:
-    """Print how many images each class has and optionally save a contact sheet."""
-    counts = dataset.count_images()
+def print_summary(save_sheet=False):
     print("Images per class:")
-    for label, n in counts.items():
+    for label, n in dataset.count_images().items():
         status = "OK" if n >= TARGET_PER_CLASS else f"{TARGET_PER_CLASS - n} missing"
         print(f"  {label:5s} {n:3d}  ({status})")
-
     if save_sheet:
-        sheet = dataset.contact_sheet()
-        os.makedirs(config.DATASET_DIR, exist_ok=True)   # imwrite fails silently otherwise
+        os.makedirs(config.DATASET_DIR, exist_ok=True)   # si no existe imwrite falla sin avisar
         path = os.path.join(config.DATASET_DIR, "overview.jpg")
-        cv2.imwrite(path, sheet)
+        cv2.imwrite(path, dataset.contact_sheet())
         print(f"Contact sheet saved to {path}")
 
 
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser(description="Capture the LSE reference dataset.")
     parser.add_argument("--summary", action="store_true",
                         help="do not open the camera, only print counts and "
                              "save a contact sheet of the dataset")
     args = parser.parse_args()
-
     if args.summary:
         print_summary(save_sheet=True)
     else:

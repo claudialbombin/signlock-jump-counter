@@ -17,3 +17,43 @@ Pasos 3 a 9 integrados y funcionando de punta a punta en un demo propio (no hace
 
 ## Entregable del paso
 Tabla de resultados (puede ser un `.md` o `.csv` dentro de `pasos/`) con las métricas de la prueba, y lista corta de casos límite/limitaciones conocidas.
+
+---
+
+## Cómo se mide (implementado el 24/11)
+
+### Sesión de prueba
+```bash
+python main.py --trials --log --tag natural     # luz natural, Claudia
+python main.py --trials --log --tag artificial  # luz artificial
+python main.py --trials --log --tag tere        # otra persona
+```
+- `--trials` no abre el tracker: cada vez que se desbloquea vuelve a bloquear, aprende el fondo otra vez (2 s para sacar la mano) y espera el código de nuevo. `q` termina la sesión.
+- `--log` guarda cada evento del decodificador en `pasos/lse/pruebas/sesion_<fecha>_<tag>.csv`. El `tag` es la condición de la prueba y es la fila de la tabla.
+- Protocolo: en cada intento se intenta deletrear H-O-L-A entero, sin hacer letras de otras a propósito. Así cualquier letra que no sea la esperada es una letra mal leída por el sistema. Si una vez te equivocas tú, pulsa `r`: ese intento queda como abortado y no cuenta.
+- Objetivo: unos 20 intentos por condición.
+
+### Tabla
+```bash
+python -m lse_auth.trial_report                                   # todas las sesiones
+python -m lse_auth.trial_report --out pasos/lse/pruebas/resultados.md
+```
+Cuenta, por condición y en total:
+
+| Columna | Qué es |
+|---|---|
+| Intentos | Desde la primera letra correcta hasta `unlocked`, `wrong`, `restart` o `timeout`. Los abortados con `r` no cuentan. |
+| Desbloqueos y tasa | Intentos que terminan en `unlocked`. |
+| Falsos resets | Intentos perdidos porque se leyó una letra que no era la esperada (`wrong` o `restart`). |
+| Timeouts | 30 s sin letra correcta. |
+| Letras mal leídas | Cada `wrong`/`restart`, con el par esperada→leída (p. ej. O->H), que dice qué regla del Paso 6 hay que revisar. |
+| Tiempo medio / mediana | Segundos desde la H hasta el desbloqueo. |
+
+Los tests (`tests/test_trial_report.py`) comprueban el recuento con logs escritos a mano.
+
+### Limitación
+El log solo ve las letras que el estabilizador confirma. Una letra que nunca llega a confirmarse (la mano no se reconoce) no aparece como error: se nota en el tiempo hasta desbloquear o acaba en timeout.
+
+## Resultados
+
+Pendiente de las sesiones en vivo.

@@ -1,8 +1,4 @@
-"""
-Tests of the step 9 overlay on a synthetic frame and hand.
-
-Run with:  python -m pytest tests/test_overlay.py
-"""
+# overlay del paso 9 con una mano dibujada
 
 import time
 
@@ -19,7 +15,7 @@ W, H = 1280, 720
 
 
 def synthetic_hand():
-    """Palm + one finger drawn inside the ROI, as a HandContour."""
+    # palma + un dedo dentro del recuadro
     x, y, w, h = config.roi_pixels(W, H)
     mask = np.zeros((H, W), np.uint8)
     cx, cy = x + w // 2, y + 2 * h // 3
@@ -38,19 +34,19 @@ def test_every_state_draws_without_errors():
     detector = StableLetterDetector()
     decoder = SequenceDecoder(code="HOLA", verbose=False)
     blank = frame()
-    # empty box, locked
+    # vacio, bloqueado
     view = draw_overlay(frame(), None, None, detector, decoder, now=0.0)
     assert view.shape == blank.shape and not np.array_equal(view, blank)
-    # letter being confirmed, cut hand
+    # confirmando, mano cortada
     for i in range(5):
         detector.update("H", now=i / 30)
     draw_overlay(frame(), hand, "H", detector, decoder, cut=True, now=0.2)
-    # letter confirmed, part of the code done, countdown
+    # confirmada, parte del codigo hecho
     for i in range(5, 30):
         detector.update("H", now=i / 30)
     decoder.feed("H", now=1.0)
     draw_overlay(frame(), hand, "H", detector, decoder, now=2.0)
-    # mistake message, then unlocked
+    # mensaje de error y luego desbloqueado
     decoder.feed("L", now=3.0)
     draw_overlay(frame(), hand, "L", detector, decoder, now=3.5)
     for i, letter in enumerate("HOLA"):
@@ -61,7 +57,7 @@ def test_every_state_draws_without_errors():
 def test_mistake_message_disappears():
     decoder = SequenceDecoder(code="HOLA", verbose=False)
     detector = StableLetterDetector()
-    decoder.feed("O", now=0.0)                       # wrong letter
+    decoder.feed("O", now=0.0)                       # mal
     with_message = draw_overlay(frame(), None, None, detector, decoder, now=1.0)
     without = draw_overlay(frame(), None, None, detector, decoder, now=10.0)
     bottom = slice(H - 70, H)
@@ -78,4 +74,4 @@ def test_overlay_is_cheap():
     for view in views:
         draw_overlay(view, hand, "O", detector, decoder, now=1.0)
     per_frame_ms = (time.perf_counter() - start) / len(views) * 1000
-    assert per_frame_ms < 5.0          # measured ~1.4 ms at 1280x720
+    assert per_frame_ms < 5.0          # sale ~1.4 ms

@@ -1,8 +1,4 @@
-"""
-Tests of the step 7 StableLetterDetector with synthetic letter streams.
-
-Run with:  python -m pytest tests/test_stabilizer.py
-"""
+# estabilizador del paso 7
 
 import random
 
@@ -12,7 +8,6 @@ FPS = 30.0
 
 
 def run(letters, fps=FPS, detector=None):
-    """Feed a list of per-frame letters at a fixed rate; return the confirmed ones."""
     detector = detector or StableLetterDetector()
     out = []
     for i, letter in enumerate(letters):
@@ -62,7 +57,7 @@ def test_flicker_between_two_letters_is_not_confirmed():
 
 
 def test_short_dropout_while_holding_does_not_repeat_the_letter():
-    # 2 frames lost (< STABLE_RESET_TIME) in the middle of a held H
+    # se pierden 2 frames en medio de la H
     assert run(frames("H", 1) + frames(None, 2 / FPS) + frames("H", 1)) == ["H"]
 
 

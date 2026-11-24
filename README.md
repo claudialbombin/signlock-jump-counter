@@ -31,6 +31,17 @@ pip install -r requirements.txt
 
 ## Usage
 
+Run the whole system: spell H-O-L-A in front of the camera to unlock, then the jump counter starts.
+
+```bash
+python main.py               # unlock, then the tracker
+python main.py --log         # also save the unlock events in pasos/lse/pruebas/
+python main.py --trials --log --tag natural   # test session: unlock again and again, no tracker
+python -m lse_auth.trial_report               # results table from the test sessions
+```
+
+Tools for each step:
+
 ```bash
 python calibration_main.py                    # offline calibration -> calibration/camera_params.npz
 python -m lse_auth.reference_viewer           # H-O-L-A reference panel
@@ -38,4 +49,5 @@ python -m lse_auth.capture_dataset            # capture the labelled dataset
 python -m lse_auth.capture_dataset --summary  # images per class + contact sheet
 python -m lse_auth.segmentation_preview       # live hand segmentation (f = background)
 python -m lse_auth.segmentation_preview --dataset  # segment every image with a background
+python -m pytest tests                        # unit tests of the security block
 ```

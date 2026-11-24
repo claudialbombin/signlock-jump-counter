@@ -1,12 +1,4 @@
-"""
-Tests of the step 6 rules with feature vectors measured on real frames.
-
-Each case copies the fingers (angle, width, length), solidity and
-top_extent printed by `segmentation_preview --errors` or the dataset
-evaluation, so the rules are checked without the images.
-
-Run with:  python -m pytest tests/test_classifier.py
-"""
+# reglas del paso 6 con las medidas de frames reales
 
 import pytest
 
@@ -22,7 +14,7 @@ def hand(fingers, solidity=0.7, top_extent=3.0, o_hole=False, cut=False):
 
 
 CASES = [
-    # letters
+    # letras
     ("L Tere", [(92.0, 0.47, 3.1), (157.0, 0.53, 2.3)], {}, "L"),
     ("H pressed Claudia", [(38.0, 0.85, 3.0), (128.0, 0.48, 2.2)], {}, "H"),
     ("H thumb up", [(39.7, 0.46, 2.62), (72.8, 0.46, 2.76), (119.1, 0.62, 2.17)], {}, "H"),
@@ -32,7 +24,7 @@ CASES = [
     ("O Claudia front", [(76.7, 1.64, 2.23), (91.5, 0.85, 2.75), (106.2, 0.66, 2.71)], {}, "O"),
     ("O Claudia 2 tips", [(59.8, 1.18, 2.26), (79.9, 0.72, 2.67)], {}, "O"),
     ("A fist", [], {"solidity": 0.82, "top_extent": 1.45}, "A"),
-    # not letters (NONE frames that used to give O / H / A)
+    # NONE que antes salian como O / H / A
     ("open hand, 2 tips apart", [(46.3, 0.56, 2.06), (87.0, 1.0, 2.57)], {}, None),
     ("open hand, 3 tips spread", [(66.3, 0.64, 2.01), (98.0, 0.93, 2.73),
                                   (118.6, 0.57, 3.23)], {}, None),
