@@ -1,66 +1,35 @@
-"""
-Step 3 - Check the hand segmentation, offline or live.
-
-Usage
------
-    python -m lse_auth.segmentation_preview                # live camera
-    python -m lse_auth.segmentation_preview --dataset      # whole dataset
-    python -m lse_auth.segmentation_preview --sequence O/img_40.jpg
-
-The live view shows the step 9 interface (lse_auth/overlay.py): the
-BLOQUEADO / DESBLOQUEADO badge, the boxes of the code, the letter of the
-current frame with the bar that fills while step 7 confirms it, and the
-mistake messages of step 8. On top of it, the debug layer (key d) paints
-the hand mask and draws the palm, the fingertips, the finger widths and
-the number of fingers. `--code` changes the unlock code (H-O-L-A by
-default), e.g. `--code HO` to try the flow quickly.
-
-Live controls
--------------
-    f        (re)capture the background: take the hand out of the box first
-    r        clear the confirmed letters and lock again
-    d        show / hide the debug layer (mask, palm, fingertips, widths)
-    s        save the transformation sequence of the current frame
-    e        save the current frame + background in errores/ (when the
-             letter is wrong), to reproduce it later with --errors
-    q / ESC  quit
-
---dataset runs segment_hand on every image that has a background in
-backgrounds.csv, prints the time, the hand area and the letters predicted
-per class and saves a
-contact sheet (image | mask) in pasos/lse/figuras/segmentacion_dataset.jpg.
-
---sequence saves the figure "secuencia de transformación de la imagen" that
-the report asks for: frame -> background -> background with the frame's
-exposure -> difference -> changed -> filled -> skin -> hand.
-"""
+# para comprobar la segmentacion y las letras, en directo o con el dataset
+#   python -m lse_auth.segmentation_preview                  directo
+#   python -m lse_auth.segmentation_preview --dataset
+#   python -m lse_auth.segmentation_preview --sequence O/img_40.jpg   figura del informe
+#   python -m lse_auth.segmentation_preview --errors         los frames guardados con e
+# teclas: f fondo, r bloquear, d capa debug, s guardar secuencia,
+#         e guardar frame + fondo en errores/, q salir
 
 import argparse
 import glob
 import os
 import time
 from collections import Counter
-from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
 
 from lse_auth import config, dataset
 from lse_auth.alphabet import CLASS_LABELS
+from lse_auth.camera import FrameGrabber
 from lse_auth.classifier import classify
 from lse_auth.contours import find_hand_contour
 from lse_auth.features import extract_features
-from lse_auth.segmentation import BackgroundModel, segment_hand
-from lse_auth.camera import FrameGrabber
 from lse_auth.overlay import draw_overlay
+from lse_auth.segmentation import BackgroundModel, segment_hand
 from lse_auth.sequence_decoder import SequenceDecoder
 from lse_auth.stabilizer import StableLetterDetector
 
 FIGURES_DIR = os.path.join(config.PROJECT_ROOT, "pasos", "lse", "figuras")
-ERRORS_DIR = os.path.join(config.PROJECT_ROOT, "errores")     # not in git (faces, rooms)
+ERRORS_DIR = os.path.join(config.PROJECT_ROOT, "errores")   # no se sube (salen caras)
 WINDOW = "Hand segmentation - f: background, s: save, q: quit"
 
-# Order and captions of the transformation sequence
 SEQUENCE = [
     ("frame", "1. Frame (ROI)"),
     ("background", "2. Fondo vacio"),
@@ -73,43 +42,34 @@ SEQUENCE = [
 ]
 
 
-def _to_bgr(image: np.ndarray) -> np.ndarray:
-    """Grey masks to BGR so they can be stacked with colour images."""
-    return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) if image.ndim == 2 else image
+def _to_bgr(img):
+    return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) if img.ndim == 2 else img
 
 
-def sequence_figure(steps: Dict[str, np.ndarray], tile_width: int = 280) -> np.ndarray:
-    """
-    Build the transformation sequence as a 2 x 4 grid with captions.
-
-    Parameters
-    ----------
-    steps : dict
-        Intermediate images returned by segment_hand(..., debug=True).
-    tile_width : int
-        Width of each tile in pixels.
-    """
+def sequence_figure(steps, tile_width=280):
+    # 2 filas de 4 con su titulo
     tiles = []
     for key, caption in SEQUENCE:
-        image = _to_bgr(steps[key])
-        h, w = image.shape[:2]
-        tile = cv2.resize(image, (tile_width, int(h * tile_width / w)),
-                          interpolation=cv2.INTER_AREA)
+        img = _to_bgr(steps[key])
+        h, w = img.shape[:2]
+        tile = cv2.resize(img, (tile_width, int(h * tile_width / w)), interpolation=cv2.INTER_AREA)
         band = np.full((30, tile_width, 3), 255, np.uint8)
-        cv2.putText(band, caption, (5, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (0, 0, 0), 1, cv2.LINE_AA)
+        cv2.putText(band, caption, (5, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
         tiles.append(np.vstack([band, tile]))
     gap = np.full((tiles[0].shape[0], 6, 3), 255, np.uint8)
-    rows = [np.hstack(sum(([t, gap] for t in tiles[i:i + 4]), [])[:-1])
-            for i in (0, 4)]
+    rows = []
+    for i in (0, 4):
+        row = []
+        for t in tiles[i:i + 4]:
+            row += [t, gap]
+        rows.append(np.hstack(row[:-1]))
     return np.vstack([rows[0], np.full((6, rows[0].shape[1], 3), 255, np.uint8), rows[1]])
 
 
-def overlay_mask(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """Frame with the hand painted in green and the ROI drawn."""
+def overlay_mask(frame, mask):
     view = frame.copy()
     x, y, w, h = config.roi_pixels(frame.shape[1], frame.shape[0])
-    # Only the ROI can contain hand pixels: blend there, with OpenCV (fast)
+    # solo puede haber mano dentro del recuadro, pinto solo ahi
     roi, hand = view[y:y + h, x:x + w], mask[y:y + h, x:x + w]
     tinted = cv2.add(cv2.multiply(roi, (0.5, 0.5, 0.5, 0)), (0, 127, 0, 0))
     cv2.copyTo(tinted, hand, roi)
@@ -117,16 +77,8 @@ def overlay_mask(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return view
 
 
-def recognise(mask: np.ndarray):
-    """
-    Steps 4-6 on a hand mask.
-
-    Returns
-    -------
-    (letter, hand, features)
-        letter is "H", "O", "L" or None; hand and features are None when there
-        is no hand in the ROI.
-    """
+def recognise(mask):
+    # pasos 4-6. Todo None si no hay mano
     hand = find_hand_contour(mask)
     if hand is None:
         return None, None, None
@@ -134,14 +86,9 @@ def recognise(mask: np.ndarray):
     return classify(features), hand, features
 
 
-def draw_recognition(view: np.ndarray, letter: Optional[str], hand, features,
-                     show_letter: bool = True) -> None:
-    """
-    Debug drawing: palm, fingertips, widths, number of fingers (in place).
-
-    With show_letter (offline, --errors) the contour and the letter are
-    drawn too; live, they are drawn by the step 9 overlay.
-    """
+def draw_recognition(view, letter, hand, features, show_letter=True):
+    # palma, puntas, anchos y n de dedos. Con show_letter tambien el contorno
+    # y la letra (en directo eso ya lo pinta el overlay)
     if hand is None:
         return
     color = (0, 255, 0) if letter else (0, 200, 255)
@@ -151,48 +98,40 @@ def draw_recognition(view: np.ndarray, letter: Optional[str], hand, features,
         cv2.circle(view, tip, 8, (0, 0, 255), -1)
 
     x, y, w, _ = config.roi_pixels(view.shape[1], view.shape[0])
-    cv2.putText(view, f"{features.n_fingers} dedo{'' if features.n_fingers == 1 else 's'}",
-                (x + w + 15, y + 135), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
-    # Widths in palm radii next to each tip: ~0.5 one finger, ~1 two together
-    for finger in features.fingers:
-        cv2.putText(view, f"{finger.width:.2f}", (finger.tip[0] + 10, finger.tip[1] - 10),
+    n = features.n_fingers
+    cv2.putText(view, f"{n} dedo{'' if n == 1 else 's'}", (x + w + 15, y + 135),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+    # ~0.5 un dedo, ~1 dos juntos
+    for f in features.fingers:
+        cv2.putText(view, f"{f.width:.2f}", (f.tip[0] + 10, f.tip[1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
 
     if not show_letter:
         return
     cv2.drawContours(view, [hand.contour], -1, color, 2, cv2.LINE_8)
     text = letter if letter else "?"
-    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX,
-                4.0, (0, 0, 0), 14, cv2.LINE_AA)
-    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX,
-                4.0, color, 6, cv2.LINE_AA)
-    # A hand cut by the box is not classified: ask to bring it inside
+    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX, 4.0, (0, 0, 0), 14, cv2.LINE_AA)
+    cv2.putText(view, text, (x + w + 15, y + 110), cv2.FONT_HERSHEY_SIMPLEX, 4.0, color, 6, cv2.LINE_AA)
     if features.cut:
         cv2.putText(view, "Mete toda la mano en el recuadro", (x, y - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
 
 
 class LetterSmoother:
-    """
-    Majority vote over the last frames, so a single bad frame does not
-    change the letter on screen. It only makes the display calm: the
-    letters that count are the ones confirmed by StableLetterDetector.
+    # votacion de los ultimos frames, solo para que la letra de la pantalla
+    # no salte. Las que cuentan son las del estabilizador
 
-    A letter is shown only when it wins at least MIN_SHARE of the window.
-    """
-
-    def __init__(self, window: int = 9, min_share: float = 0.6) -> None:
+    def __init__(self, window=9, min_share=0.6):
         self.window, self.min_share = window, min_share
-        self.history: List[Optional[str]] = []
+        self.history = []
 
-    def update(self, letter: Optional[str]) -> Optional[str]:
+    def update(self, letter):
         self.history = (self.history + [letter])[-self.window:]
-        best, count = Counter(self.history).most_common(1)[0]
-        return best if count >= self.min_share * self.window else None
+        best, n = Counter(self.history).most_common(1)[0]
+        return best if n >= self.min_share * self.window else None
 
 
-def save_error(frame: np.ndarray, background: np.ndarray) -> None:
-    """Keep a misclassified frame and its background to reproduce it offline."""
+def save_error(frame, background):
     os.makedirs(ERRORS_DIR, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
     cv2.imwrite(os.path.join(ERRORS_DIR, f"{stamp}_frame.png"), frame)
@@ -200,8 +139,7 @@ def save_error(frame: np.ndarray, background: np.ndarray) -> None:
     print(f"Saved errores/{stamp}_frame.png (+ background)")
 
 
-def run_errors() -> None:
-    """Recognise every frame saved with the e key and print its features."""
+def run_errors():
     frames = sorted(glob.glob(os.path.join(ERRORS_DIR, "*_frame.png")))
     if not frames:
         print("No frames in errores/ (press e in the live view to save one).")
@@ -216,13 +154,12 @@ def run_errors() -> None:
         view = overlay_mask(frame, mask)
         draw_recognition(view, letter, hand, features)
         cv2.imwrite(path.replace("_frame.png", "_result.jpg"), view)
-        fingers = ([(f.angle, f.width, f.length) for f in features.fingers]
-                   if features else [])
+        fingers = [(f.angle, f.width, f.length) for f in features.fingers] if features else []
         print(f"{os.path.basename(path)}: {letter or '-'}  hole={bool(hand and hand.has_hole)}"
               f"  fingers (angle, width, length)={fingers}")
 
 
-def _save(image: np.ndarray, name: str) -> str:
+def _save(image, name):
     os.makedirs(FIGURES_DIR, exist_ok=True)
     path = os.path.join(FIGURES_DIR, name)
     cv2.imwrite(path, image)
@@ -230,28 +167,25 @@ def _save(image: np.ndarray, name: str) -> str:
     return path
 
 
-def run_dataset(per_class: int = 6, thumb_width: int = 150) -> None:
-    """Segment every image with a background and summarise the result."""
-    times: List[float] = []
+def run_dataset(per_class=6, thumb_width=150):
+    times = []
     rows = []
     for label in CLASS_LABELS:
         areas, tiles = [], []
-        predicted: Counter = Counter()
-        paired = [p for p in dataset.list_images(label)
-                  if dataset.background_for(p) is not None]
+        predicted = Counter()
+        paired = [p for p in dataset.list_images(label) if dataset.background_for(p) is not None]
         for i, path in enumerate(paired):
-            image, background = cv2.imread(path), dataset.background_for(path)
-            start = time.perf_counter()
-            mask = segment_hand(image, background)
-            times.append(time.perf_counter() - start)
+            img, bg = cv2.imread(path), dataset.background_for(path)
+            t0 = time.perf_counter()
+            mask = segment_hand(img, bg)
+            times.append(time.perf_counter() - t0)
             areas.append(int(np.count_nonzero(mask)))
             predicted[recognise(mask)[0] or "-"] += 1
             if i < per_class:
-                x, y, w, h = config.roi_pixels(image.shape[1], image.shape[0])
-                pair = np.hstack([image[y:y + h, x:x + w],
-                                  _to_bgr(mask[y:y + h, x:x + w])])
-                tiles.append(cv2.resize(pair, (2 * thumb_width,
-                                               int(pair.shape[0] * 2 * thumb_width / pair.shape[1]))))
+                x, y, w, h = config.roi_pixels(img.shape[1], img.shape[0])
+                pair = np.hstack([img[y:y + h, x:x + w], _to_bgr(mask[y:y + h, x:x + w])])
+                new_h = int(pair.shape[0] * 2 * thumb_width / pair.shape[1])
+                tiles.append(cv2.resize(pair, (2 * thumb_width, new_h)))
         if not paired:
             print(f"  {label:5s} no images with background")
             continue
@@ -259,8 +193,7 @@ def run_dataset(per_class: int = 6, thumb_width: int = 150) -> None:
               f"{min(areas)}-{max(areas)} px (median {int(np.median(areas))}), "
               f"predicted {dict(predicted)}")
         row = np.hstack(tiles)
-        cv2.putText(row, label, (8, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0,
-                    (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(row, label, (8, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
         rows.append(row)
 
     if not rows:
@@ -269,32 +202,29 @@ def run_dataset(per_class: int = 6, thumb_width: int = 150) -> None:
     print(f"segment_hand: median {1000 * np.median(times):.1f} ms, "
           f"max {1000 * max(times):.1f} ms per frame")
     width = max(r.shape[1] for r in rows)
-    rows = [np.hstack([r, np.full((r.shape[0], width - r.shape[1], 3), 255, np.uint8)])
-            for r in rows]
+    rows = [np.hstack([r, np.full((r.shape[0], width - r.shape[1], 3), 255, np.uint8)]) for r in rows]
     _save(np.vstack(rows), "segmentacion_dataset.jpg")
 
 
-def run_sequence(relative_path: str) -> None:
-    """Save the transformation sequence of one dataset image."""
+def run_sequence(relative_path):
     path = os.path.join(config.DATASET_DIR, relative_path)
-    background = dataset.background_for(path)
-    if background is None:
+    bg = dataset.background_for(path)
+    if bg is None:
         raise SystemExit(f"{relative_path} has no background in backgrounds.csv")
-    _, steps = segment_hand(cv2.imread(path), background, debug=True)
+    _, steps = segment_hand(cv2.imread(path), bg, debug=True)
     name = "secuencia_" + relative_path.replace("/", "_").rsplit(".", 1)[0] + ".png"
     _save(sequence_figure(steps), name)
 
 
-def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
-    """Live view: background capture, mask overlay and FPS."""
-    from lse_auth.camera import Camera     # opens the device: only needed live
+def run_live(code="".join(config.UNLOCK_SEQUENCE)):
+    from lse_auth.camera import Camera
 
     model = BackgroundModel()
     smoother = LetterSmoother()
     detector = StableLetterDetector()
     decoder = SequenceDecoder(code=code.upper())
-    capturing = True                       # start by learning the background
-    debug = True                           # mask, palm, fingertips, widths
+    capturing = True
+    debug = True
     fps, proc_ms, last = 0.0, 0.0, time.perf_counter()
     cam_count, cam_fps, cam_t = 0, 0.0, time.perf_counter()
     with Camera() as cam:
@@ -304,13 +234,12 @@ def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
             frame = grabber.read()
             if frame is None:
                 break
-            start = time.perf_counter()
+            t0 = time.perf_counter()
             if capturing:
                 capturing = not model.add(frame)
                 view = frame.copy()
-                cv2.putText(view, "Saving background: keep the box empty",
-                            (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0,
-                            (0, 0, 255), 2, cv2.LINE_AA)
+                cv2.putText(view, "Saving background: keep the box empty", (20, 40),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
             else:
                 mask = segment_hand(frame, model.image)
                 letter, hand, features = recognise(mask)
@@ -323,12 +252,10 @@ def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
                 view = overlay_mask(frame, mask) if debug else frame.copy()
                 if debug:
                     draw_recognition(view, shown, hand, features, show_letter=False)
-                draw_overlay(view, hand, shown, detector, decoder,
-                             cut=bool(features and features.cut))
-            proc_ms = 0.9 * proc_ms + 0.1 * 1000 * (time.perf_counter() - start)
+                draw_overlay(view, hand, shown, detector, decoder, cut=bool(features and features.cut))
+            proc_ms = 0.9 * proc_ms + 0.1 * 1000 * (time.perf_counter() - t0)
 
-            # FPS shown = frames processed per second. The camera rate and
-            # the processing time are shown too, to know which one limits.
+            # fps procesados, fps de la camara y ms de proceso, para ver cual limita
             now = time.perf_counter()
             fps = 0.9 * fps + 0.1 / max(now - last, 1e-6)
             last = now
@@ -363,7 +290,7 @@ def run_live(code: str = "".join(config.UNLOCK_SEQUENCE)) -> None:
     cv2.destroyAllWindows()
 
 
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser(description="Check the step 3 hand segmentation.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--dataset", action="store_true",
