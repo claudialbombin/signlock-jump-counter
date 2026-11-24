@@ -1,19 +1,11 @@
-# Step 11: results table from the session logs.
+# paso 11: tabla de resultados a partir de los csv de las sesiones
+#   python -m lse_auth.trial_report [csvs] [--out fichero.md]
 #
-#   python main.py --trials --log --tag <condition>    -> pasos/lse/pruebas/sesion_*.csv
-#   python -m lse_auth.trial_report                    all sessions
-#   python -m lse_auth.trial_report pasos/lse/pruebas/sesion_*_natural.csv
-#   python -m lse_auth.trial_report --out pasos/lse/pruebas/resultados.md
-#
-# How attempts are counted (in a session you're always trying to spell the code):
-# - an attempt starts with the first correct letter (or a restart)
-# - it ends with unlocked, wrong (false reset), restart (lost, a new one
-#   starts), timeout, or reset (r key = aborted, doesn't count)
-# - wrong/restart inside an attempt = letter misread, since you were showing
-#   the expected one. We keep expected->read (e.g. O->H)
-# - wrong with no attempt open (before the first letter or right after a
-#   failed one) = "loose letter", probably the hand moving between signs,
-#   so it's counted apart. In the impostor session all letters are these
+# un intento empieza con la primera letra buena (o un restart) y acaba con
+# unlocked, wrong, restart, timeout o reset (r, ese no cuenta).
+# wrong/restart dentro de un intento = letra mal leida (esperada->leida).
+# wrong sin intento abierto = letra suelta (seguramente la mano moviendose
+# entre signos), va aparte. En la sesion de impostor son todas asi
 
 import argparse
 import csv
@@ -32,7 +24,7 @@ LOG_DIR = os.path.join(config.PROJECT_ROOT, "pasos", "lse", "pruebas")
 class Attempt:
     start: float
     end: float = None
-    result: str = None      # unlocked / wrong / restart / timeout / reset
+    result: str = None
 
     @property
     def duration(self):
@@ -45,14 +37,14 @@ class Session:
     tag: str
     attempts: list = field(default_factory=list)
     misread: Counter = field(default_factory=Counter)    # "O->H": n
-    stray_wrong: int = 0                                 # loose letters
+    stray_wrong: int = 0                                 # letras sueltas
 
     def count(self, result):
         return sum(a.result == result for a in self.attempts)
 
     @property
     def finished(self):
-        # the ones that count for the rate: not aborted and not left open
+        # sin los abortados con r ni los que se quedan abiertos
         return [a for a in self.attempts if a.result not in (None, "reset")]
 
 
@@ -127,7 +119,6 @@ def _fmt(value, pattern):
 
 
 def markdown_table(groups):
-    """groups = {tag: [sessions]} -> one row per tag + total"""
     lines = [
         "| Condición | Sesiones | Intentos | Desbloqueos | Tasa | Falsos resets | Timeouts "
         "| Letras mal leídas | Letras sueltas | Tiempo medio (s) | Mediana (s) |",
