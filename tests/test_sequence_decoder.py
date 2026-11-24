@@ -1,8 +1,4 @@
-"""
-Tests of the step 8 SequenceDecoder.
-
-Run with:  python -m pytest tests/test_sequence_decoder.py
-"""
+# decodificador del paso 8
 
 import pytest
 
@@ -53,7 +49,7 @@ def test_timeout_forgets_a_started_sequence():
     feed_all(dec, "HO")
     assert dec.tick(now=15.0) is None and dec.time_left(now=15.0) == pytest.approx(6.0)
     assert dec.tick(now=30.0) is Event.TIMEOUT and dec.buffer == []
-    # a late letter after the timeout counts as a new attempt
+    # una letra despues del timeout ya es otro intento
     dec2 = decoder()
     feed_all(dec2, "HO")
     assert dec2.feed("L", now=60.0) is Event.WRONG and dec2.buffer == []
@@ -61,7 +57,7 @@ def test_timeout_forgets_a_started_sequence():
 
 def test_each_correct_letter_restarts_the_timeout():
     dec = decoder()
-    feed_all(dec, "HOLA", step=15.0)          # 45 s in total, 15 s between letters
+    feed_all(dec, "HOLA", step=15.0)          # 45 s en total pero 15 entre letras
     assert dec.is_unlocked()
 
 
