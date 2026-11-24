@@ -36,6 +36,8 @@ Run the whole system: spell H-O-L-A in front of the camera to unlock, then the j
 ```bash
 python main.py               # unlock, then the tracker
 python main.py --log         # also save the unlock events in pasos/lse/pruebas/
+python main.py --trials --log --tag natural   # test session: unlock again and again, no tracker
+python -m lse_auth.trial_report               # results table from the test sessions
 ```
 
 Tools for each step:

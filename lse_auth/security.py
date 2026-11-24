@@ -171,9 +171,12 @@ class SecurityBlock:
         self._logged = len(self.decoder.events)
 
 
-def default_log_path() -> str:
-    """pasos/lse/pruebas/sesion_YYYYmmdd_HHMMSS.csv"""
-    return os.path.join(LOG_DIR, time.strftime("sesion_%Y%m%d_%H%M%S.csv"))
+def default_log_path(tag: Optional[str] = None) -> str:
+    """pasos/lse/pruebas/sesion_YYYYmmdd_HHMMSS[_tag].csv (tag = test condition)."""
+    name = time.strftime("sesion_%Y%m%d_%H%M%S")
+    if tag:
+        name += "_" + "".join(c if c.isalnum() or c == "-" else "-" for c in tag.lower())
+    return os.path.join(LOG_DIR, name + ".csv")
 
 
 def draw_fps(view: np.ndarray, fps: float) -> None:
