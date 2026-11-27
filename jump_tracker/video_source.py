@@ -17,9 +17,11 @@ read() always returns (frame, t), with t in seconds since the start.
 """
 
 import argparse
+import os
 import time
 
 import cv2
+import numpy as np
 
 from lse_auth.camera import Camera
 
@@ -50,6 +52,11 @@ class VideoSource:
             # CAP_PROP_FPS returns 0.0 if the file does not store it -> 30
             self.frame_rate = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
             self.frame_index = 0
+            self.timestamps = None
+            csvpath = timestamps_path(videopath)
+            if os.path.exists(csvpath):
+                # Column 1 = t (column 0 is the index); ndmin=1 so a one-frame clip still gives an array
+                self.timestamps = np.loadtxt(csvpath, delimiter=",", skiprows=1,usecols=1, ndmin=1)
 
     def read(self):
         """
@@ -69,7 +76,10 @@ class VideoSource:
         ret, frame = self.cap.read()
         if not ret:
             return None, None
-        t = self.frame_index / self.frame_rate     # time from the frame number
+        if self.timestamps is not None and self.frame_index < len(self.timestamps):
+            t = float(self.timestamps[self.frame_index])   # real time of the frame
+        else:
+            t = self.frame_index / self.frame_rate         # time from the frame number
         self.frame_index += 1
         return frame, t
 
@@ -120,6 +130,17 @@ def preview(videopath=None):
                 break
     cv2.destroyAllWindows()
 
+def timestamps_path(videopath):
+    """
+    Path of the CSV with the real time of every frame of a recorded clip.
+
+    Args:
+        videopath (str): Path to the video file.
+
+    Returns:
+        str: Same path with '_timestamps.csv' instead of the extension.
+    """
+    return os.path.splitext(videopath)[0] + "_timestamps.csv"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Preview of VideoSource")
